@@ -53,6 +53,9 @@ typedef struct _DtaGenlock
 {
     Bool  m_IsSupported;        // Genlocking is supported
     Int  m_GenlArch;            // Genlock architecture
+    Int  m_OpModeIntSrc;        // Operational mode when locking to an internal source
+    Int  m_VcxoValue;           // Manual VCXO control (-1 = no manual control)
+    void*  m_pVcxoOwner;        // Handle of app controlling VCXO
     Int  m_AsyncPortIndex;      // Port-index of analog sync input (-1 = no aync port)
 
     Int  m_FracMode;            // Status fractional mode
@@ -75,10 +78,13 @@ DtStatus  DtaGenlockInit(DtaDeviceData* pDvcData);
 DtStatus  DtaGenlockInitPowerup(DtaDeviceData* pDvcData);
 void  DtaGenlockPowerDown(DtaDeviceData* pDvcData);
 DtStatus  DtaGenlockPowerDownPre(DtaDeviceData* pDvcData);
+void  DtaGenlockClose(DtaDeviceData* pDvcData, DtFileObject* pFile);
 DtStatus  DtaGenlockApplyGenRefConfig(DtaDeviceData* pDvcData);
 DtStatus  DtaGenlockApplyFracModeConfig(DtaDeviceData* pDvcData);
 DtStatus  DtaGenlockGetRefState(DtaDeviceData* pDvcData, Int PortIndex, Int *pEnabled,
                                                                             Int *pInLock);
+void  DtaGenlockSetVcxo(DtaDeviceData* pDvcData, DtFileObject* pFile, Int  VcxoValue);
+void  DtaGenlockResetVcxo(DtaDeviceData* pDvcData);
 #endif // #ifndef __GENLOCK_H
 
 

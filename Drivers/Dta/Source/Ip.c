@@ -1466,6 +1466,7 @@ DtStatus  DtaIpUpdateMacAddressFilter(DtaIpPort* pIpPort)
     UInt  FirstIpPortNum =  (pIpPort->m_IpPortIndex & 0xfffffffe);
     DtaIpPort*  pFirstPort = &pIpPort->m_pDvcData->m_IpDevice.m_pIpPorts[FirstIpPortNum];
     volatile UInt8*  pAddrMLUBase = pIpPort->m_IpPortType2.m_pAddrMatcherLookupRegs;
+    volatile UInt8*  pAddrMBase = pIpPort->m_IpPortType2.m_pAddrMatcherRegs;
     PhyMac*  pPhyMac = &pIpPort->m_PhyMac;
     UInt8  BroadcastAddress[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
     UInt32  LookupAddress;
@@ -1477,10 +1478,10 @@ DtStatus  DtaIpUpdateMacAddressFilter(DtaIpPort* pIpPort)
 
     // Busy wait until address matcher is ready updating a previous switch
     // Max. wait time about 12us after update if fired for 1Gb
-    while (DtaMacAddrFilterStatGetLutUpdatePending(pAddrMLUBase)!=0)
+    while (DtaMacAddrFilterStatGetLutUpdatePending(pAddrMBase)!=0)
     {
         DtDbgOut(ERR, PHYMAC, "[%i] MAC address filter pending: %u", 
-           pIpPort->m_IpPortIndex, DtaMacAddrFilterStatGetLutUpdatePending(pAddrMLUBase));
+             pIpPort->m_IpPortIndex, DtaMacAddrFilterStatGetLutUpdatePending(pAddrMBase));
     }
 
 
@@ -1539,15 +1540,15 @@ DtStatus  DtaIpUpdateMacAddressFilter(DtaIpPort* pIpPort)
             DtaMacAddrLookupCtrlSetNumEntryPhy1(pAddrMLUBase, NumEntries);
 
         // Update table for MAC Address matcher
-        DtaMacAddrFilterLutUpdate(pIpPort->m_IpPortType2.m_pAddrMatcherRegs);
-        DtaMacAddrFilterDelFilteredEn(pIpPort->m_IpPortType2.m_pAddrMatcherRegs, 1);
+        DtaMacAddrFilterLutUpdate(pAddrMBase);
+        DtaMacAddrFilterDelFilteredEn(pAddrMBase, 1);
 
         DtDbgOut(MAX, PHYMAC, "[%i]  Finished. Num. Entries: %i ",
                                                       pIpPort->m_IpPortIndex, NumEntries);
     } else {
         DtDbgOut(MAX, PHYMAC, "[%i] Finished. Num. Entries %i > 31. Deletion disabled",
                                       pIpPort->m_IpPortIndex, pPhyMac->m_NumMulticasts+1);
-        DtaMacAddrFilterDelFilteredEn(pIpPort->m_IpPortType2.m_pAddrMatcherRegs, 0);
+        DtaMacAddrFilterDelFilteredEn(pAddrMBase, 0);
     }
     DtMutexRelease(&pFirstPort->m_IpPortType2.m_MacAddrFiltMutex);
     return DT_STATUS_OK;

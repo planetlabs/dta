@@ -72,9 +72,8 @@ struct _DtaEvents
 DtStatus  DtaEventsInit(DtaDeviceData* pDvcData);
 DtStatus  DtaEventsCleanup(DtaDeviceData* pDvcData);
 DtStatus  DtaEventsGet(DtaDeviceData* pDvcData, DtFileObject* pFile, DtaEvents* pEvents,
-                               UInt* pEventType, UInt* pValue1, UInt* pValue2, Bool Wait);
+                                          UInt* pEventType, UInt* pValue1, UInt* pValue2);
 DtStatus  DtaEventsGetCancel(DtaDeviceData* pDvcData, DtFileObject* pFile);
-Int  DtaEventsNumPending(DtaDeviceData* pDvcData, DtFileObject* pFile);
 DtStatus  DtaEventsRegister(DtaDeviceData* pDvcData, DtFileObject* pFile,
                                                                       UInt EventTypeMask);
 DtStatus  DtaEventsSet(DtaDeviceData* pDvcData, DtFileObject* pFile, UInt EventType,

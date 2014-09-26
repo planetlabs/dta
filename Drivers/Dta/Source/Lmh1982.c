@@ -633,9 +633,31 @@ DtStatus  DtaLmh1982InitChip(DtaLmh1982* pLmh1982Data)
         }
         else	
         {
+            // Offsets manually tested with analog sync generator and Phabrix SX as
+            // test receiver
+            Int  Offset = -1;
+            switch (RefVidStd)
+            {
+            case DT_VIDSTD_1080I59_94:
+                // Offset left: 0lines, +202px
+                Offset = -5;
+                break;
+            case DT_VIDSTD_1080I50:
+                // Offset left: 0lines, -676px
+                Offset = 448;
+                break;
+            case DT_VIDSTD_525I59_94:
+                // Offset left: 0lines, -280px
+                Offset = -3;
+                break;
+            case DT_VIDSTD_625I50:
+                // Offset left: 0lines, -315px
+                Offset = -1;
+                break;
+            }
             // Verified for Analog Sync SDI-625, measured delta -040 symbols, sofline = 0
             pRegs->m_Reg11_12.Fields.m_TofOffset = 
-                                               (pRegs->m_Reg0F_10.Fields.m_RefLpfm/2) - 1;
+                                          (pRegs->m_Reg0F_10.Fields.m_RefLpfm/2) + Offset;
         }
     } 
     else 
@@ -645,12 +667,47 @@ DtStatus  DtaLmh1982InitChip(DtaLmh1982* pLmh1982Data)
                                   && pGenlock->m_RefPortIndex!=pGenlock->m_AsyncPortIndex)
             pRegs->m_Reg11_12.Fields.m_TofOffset = pRegs->m_Reg0F_10.Fields.m_RefLpfm;
         else
-            pRegs->m_Reg11_12.Fields.m_TofOffset = pRegs->m_Reg0F_10.Fields.m_RefLpfm-1;
+        {
+            // Offsets manually tested with analog sync generator and Phabrix SX as
+            // test receiver
+            Int  Offset = -1;
+            switch (RefVidStd)
+            {
+            case DT_VIDSTD_720P59_94:
+                // Offset left: 0lines, 225px
+                Offset = -6;
+                break;
+            case DT_VIDSTD_720P50:
+                // Offset left: ???
+                //Offset = -40; // Inconsistent test results
+                break;
+            }
+            pRegs->m_Reg11_12.Fields.m_TofOffset = 
+                                              pRegs->m_Reg0F_10.Fields.m_RefLpfm + Offset;
+        }
     }
 
     // Set TOF Clock, TOF pixels per line and TOF lines per frame     
     switch (TofVidStd)
     {
+    case DT_VIDSTD_1080I50:
+        pRegs->m_Reg0B_0C.Fields.m_TofClk = 0;			// 27 MHZ
+        pRegs->m_Reg0B_0C.Fields.m_TofPpl = 960;
+        pRegs->m_Reg0D_0E.Fields.m_TofLpfm = 1125;
+        // Enable crosslock from 25fps to 25fps
+        if (pGenlock->m_RefPortIndex == DTA_GENLOCK_REFPORT_INT)
+            pRegs->m_Reg09_0A.Fields.m_TofRst = 1;
+        else
+        {
+            // For genlock tests we need to be able to crosslock from all external 
+            // standards to SDI625
+            // Note: the TOF will not be aligned, but delta between two SD signals generated 
+            // by two different 2152 boards that are crosslocked to the same standard 
+            // will be the constant	
+            pRegs->m_Reg09_0A.Fields.m_TofRst = TofRst25Fps;
+        }
+        break;
+
     case DT_VIDSTD_720P23_98:
         pRegs->m_Reg0B_0C.Fields.m_TofClk = 0;			// 27 MHZ
         pRegs->m_Reg0B_0C.Fields.m_TofPpl = 3003;		
@@ -743,6 +800,7 @@ DtStatus  DtaLmh1982InitChip(DtaLmh1982* pLmh1982Data)
         // Enable crosslock from 25fps to 59.94fps
         if (pGenlock->m_RefPortIndex == DTA_GENLOCK_REFPORT_INT)
             pRegs->m_Reg09_0A.Fields.m_TofRst = 1001;
+        break;
 
     case DT_VIDSTD_720P60:
         pRegs->m_Reg0B_0C.Fields.m_TofClk = 0;			// 27 MHZ

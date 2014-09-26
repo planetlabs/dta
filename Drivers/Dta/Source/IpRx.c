@@ -2208,7 +2208,9 @@ UInt DtaIpRxIsPacketForDVB(
     while (pIpRxChannel != NULL) 
     {
         // Check if the channel is the one we are searching for
-
+        Bool  EmptySrcIp;
+        Bool  EmptyDstIp;
+        
         // For bitrate calculation to work in idle state, 
         // we check the RxControl somewhere else and only check here 
         // if the parameters are set. 
@@ -2234,11 +2236,20 @@ UInt DtaIpRxIsPacketForDVB(
         }
 
         // Check if source + destination IP address is correct.
+        EmptySrcIp = TRUE;
+        EmptyDstIp = TRUE;
+        for (i=0; i<(IpV6Packet?16:4); i++) 
+        {
+            if (pIpRxChannel->m_SrcIPAddress[i] != 0)
+                EmptySrcIp = FALSE;
+            if (pIpRxChannel->m_DstIPAddress[i] != 0)
+                EmptyDstIp = FALSE;
+        }
+
         Stop = FALSE;
         for (i=0; i<(IpV6Packet?16:4); i++) 
         {
-            if (pIpRxChannel->m_SrcIPAddress[i]!=0 && 
-                                               pIpRxChannel->m_SrcIPAddress[i]!=pIpSrc[i])
+            if (!EmptySrcIp && pIpRxChannel->m_SrcIPAddress[i]!=pIpSrc[i])
             {
                 Stop = TRUE;
                 break;
@@ -2246,7 +2257,7 @@ UInt DtaIpRxIsPacketForDVB(
 
             // If a multicast packet is received, 
             // the m_DstIPAddress may not be 0.0.0.0
-            if ((pIpRxChannel->m_DstIPAddress[i]!=0 || MulticastPkt) && 
+            if ((!EmptyDstIp || MulticastPkt) && 
                                                pIpRxChannel->m_DstIPAddress[i]!=pIpDst[i])
             {
                 Stop = TRUE;
@@ -2254,7 +2265,7 @@ UInt DtaIpRxIsPacketForDVB(
             }
         }
 
-        if (Stop) 
+        if (Stop)
         {
             pIpRxChannel = pIpRxChannel->m_pNext;
             continue;

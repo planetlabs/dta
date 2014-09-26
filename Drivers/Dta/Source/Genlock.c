@@ -56,6 +56,7 @@ DtStatus  DtaGenlockInit(DtaDeviceData* pDvcData)
 
     // Assume genlock is not supported
     pDvcData->m_Genlock.m_IsSupported = FALSE;
+    pDvcData->m_Genlock.m_OpModeIntSrc = GENLOCK_OPMODE_INTSRC_UNDEF;
 
     pDvcData->m_Genlock.m_GenlArch = DtPropertiesGetInt(pPropData, "GENLOCK_ARCH", -1);
     // Do we have a valid architecture
@@ -98,6 +99,19 @@ DtStatus  DtaGenlockInit(DtaDeviceData* pDvcData)
     }
     else if (pDvcData->m_Genlock.m_GenlArch == DTA_GENLOCK_ARCH_2154)
     {
+        // Must have an operational mode
+        Int  OpMode = DtPropertiesGetInt(pPropData, "GENLOCK_OPMODE_INTSRC", -1);
+        if (OpMode!=GENLOCK_OPMODE_INTSRC_FREE_RUN && OpMode!=GENLOCK_OPMODE_INTSRC_AFD)
+        {
+            DtDbgOut(ERR, GENL, "Invalid value (%d) for 'GENLOCK_OPMODE_INTSRC' property",
+                                                                                  OpMode);
+            return DT_STATUS_FAIL;
+        }
+        pDvcData->m_Genlock.m_OpModeIntSrc = OpMode;
+        pDvcData->m_Genlock.m_VcxoValue = -1;
+        pDvcData->m_Genlock.m_pVcxoOwner = NULL;
+
+        
         Status = DtaLmh1983Init(pDvcData, &pDvcData->m_Genlock.m_Lmh1983);
         if (!DT_SUCCESS(Status))
             DtDbgOut(ERR, GENL, "Failed to init LMH-1983 module");
@@ -152,6 +166,44 @@ DtStatus  DtaGenlockPowerDownPre(DtaDeviceData* pDvcData)
     else if (pDvcData->m_Genlock.m_GenlArch == DTA_GENLOCK_ARCH_2154)
         Status = DtaLmh1983PowerdownPre(&pDvcData->m_Genlock.m_Lmh1983);
     return Status;
+}
+
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaGenlockResetVcxo -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+void  DtaGenlockSetVcxo(DtaDeviceData* pDvcData, DtFileObject* pFile, Int  VcxoValue)
+{
+    Bool  SetDevCtrl = (pDvcData->m_Genlock.m_VcxoValue == -1);
+    pDvcData->m_Genlock.m_VcxoValue = VcxoValue;
+    pDvcData->m_Genlock.m_pVcxoOwner = DtFileGetHandle(pFile);
+    DtaLmh1983SetVcxoValue(&pDvcData->m_Genlock.m_Lmh1983,
+                                                         pDvcData->m_Genlock.m_VcxoValue);
+    if (SetDevCtrl)
+        DtaLmh1983SetDevCtrl(&pDvcData->m_Genlock.m_Lmh1983);
+}
+
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaGenlockResetVcxo -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+void  DtaGenlockResetVcxo(DtaDeviceData* pDvcData)
+{
+    if (pDvcData->m_Genlock.m_VcxoValue == -1)
+        return;
+    pDvcData->m_Genlock.m_VcxoValue = -1;
+    pDvcData->m_Genlock.m_pVcxoOwner = NULL;
+    // Reset vcxo register to default value
+    DtaLmh1983SetVcxoValue(&pDvcData->m_Genlock.m_Lmh1983, 0x1FF);
+    // Set LMH-1983 to use default method for locking to clock
+    DtaLmh1983SetDevCtrl(&pDvcData->m_Genlock.m_Lmh1983);
+}
+
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaGenlockClose -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+void  DtaGenlockClose(DtaDeviceData* pDvcData, DtFileObject* pFile)
+{
+    if (pDvcData->m_Genlock.m_GenlArch != DTA_GENLOCK_ARCH_2154)
+        return;
+    if (pDvcData->m_Genlock.m_pVcxoOwner != DtFileGetHandle(pFile))
+        return;
+    DtaGenlockResetVcxo(pDvcData);
 }
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaGenlockApplyGenRefConfig -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
@@ -284,27 +336,26 @@ DtStatus  DtaGenlockGetRefState(DtaDeviceData* pDvcData,
   Int  *pEnabled,
   Int  *pInLock)
 { 
-  DtStatus  Status = DT_STATUS_OK;
+    DtStatus  Status = DT_STATUS_OK;
 
 #ifdef _DEBUG
-  Int  GenRefPortIndex = pDvcData->m_Genlock.m_RefPortIndex;
+    Int  GenRefPortIndex = pDvcData->m_Genlock.m_RefPortIndex;
 #endif
-  Bool  InLock = FALSE;
-  Bool  Enabled = FALSE;
-  if(pDvcData->m_Genlock.m_GenlArch == DTA_GENLOCK_ARCH_2144 || 
+    Bool  InLock = FALSE;
+    Bool  Enabled = FALSE;
+    if(pDvcData->m_Genlock.m_GenlArch == DTA_GENLOCK_ARCH_2144 ||
                                    pDvcData->m_Genlock.m_GenlArch == DTA_GENLOCK_ARCH_145)
-  {    
-    Status = DtaFpgaGenlockGetRefState(pDvcData, PortIndex, &Enabled, &InLock);
-    *pEnabled = Enabled == TRUE ? 1 : 0;
-    *pInLock = InLock == TRUE ? 1 : 0;    
-    return Status;
-  }
-  
-  // TODO: Should we also implement this for HDSDI?
-  //if(pDvcData->m_Genlock.m_GenlArch != DTA_GENLOCK_ARCH_2152)
-  //  return DtaLmh1982GenlockGetRefState(pDvcData, pInLock);
-  
-  DtDbgOut(ERR, GENL, "[%d] GENREF NOT SUPPORTED", GenRefPortIndex);
-  return DT_STATUS_NOT_SUPPORTED;  
+    {
+        Status = DtaFpgaGenlockGetRefState(pDvcData, PortIndex, &Enabled, &InLock);
+        *pEnabled = Enabled == TRUE ? 1 : 0;
+        *pInLock = InLock == TRUE ? 1 : 0;
+        return Status;
+    }
+
+    // TODO: Should we also implement this for HDSDI?
+    //if(pDvcData->m_Genlock.m_GenlArch != DTA_GENLOCK_ARCH_2152)
+    //  return DtaLmh1982GenlockGetRefState(pDvcData, pInLock);
+
+    DtDbgOut(ERR, GENL, "[%d] GENREF NOT SUPPORTED", GenRefPortIndex);
+    return DT_STATUS_NOT_SUPPORTED;
 }
-//=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ Private functions +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+

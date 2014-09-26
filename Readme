@@ -1,11 +1,11 @@
-Simple builder for the DekTec driver (2014.04 version)
+Simple builder for the DekTec driver (2014.09 version)
 
 # ############################################################ 
 # Sample packages are in sample-packages/
-wget https://github.com/breu/dta/raw/2014.04/sample-packages/dta-dkms_2014.04_all.deb
-wget https://github.com/breu/dta/raw/2014.04/sample-packages/dta_2014.04_i386.deb
+wget https://github.com/breu/dta/raw/2014.09/sample-packages/dta-dkms_2014.09_all.deb
+wget https://github.com/breu/dta/raw/2014.09/sample-packages/dta_2014.09_i386.deb
 apt-get install dkms
-dpkg -i dta-dkms_2014.04_all.deb dta_2014.04_i386.deb
+dpkg -i dta-dkms_2014.09_all.deb dta_2014.09_i386.deb
 # ############################################################ 
 
 
@@ -16,10 +16,15 @@ dpkg -i dta-dkms_2014.04_all.deb dta_2014.04_i386.deb
 # install packages for building
 sudo apt-get install devscripts debhelper
 
-# grab the new tarball and extract
-cd dta
+# grab the new tarball and extract (this may or may not work)
+cd dta/
+mkdir temp
+cd temp
 wget http://www.dektec.com/Products/SDK/LinuxSDK/Downloads/LinuxSDK.tar.gz
 tar zfxv LinuxSDK.tar.gz
+mv -f LinuxSDK/* ..
+cd ..
+rm -rf temp
 
 # update version numbers
 vi debian/changelog debian/files debian/dta/DEBIAN/control dkms.conf
@@ -36,25 +41,25 @@ debuild -b -us -uc
 # Build the kernel driver package.  We cheat and use the DKMS
 # tools to do this so you have to install it on a machine at
 # least once.
-sudo mkdir -p /usr/src/dta-2014.04
-sudo cp -dpR ../dta/dta-dkms-mkdeb /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/Drivers /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/Common /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/dkms.conf /usr/src/dta-2014.04/
+sudo mkdir -p /usr/src/dta-2014.09
+sudo cp -dpR ../dta/dta-dkms-mkdeb /usr/src/dta-2014.09/
+sudo cp -dpR ../dta/Drivers /usr/src/dta-2014.09/
+sudo cp -dpR ../dta/Common /usr/src/dta-2014.09/
+sudo cp -dpR ../dta/dkms.conf /usr/src/dta-2014.09/
 
-sudo dkms add -m dta -v 2014.04
-sudo dkms build -m dta -v 2014.04
-sudo dkms install -m dta -v 2014.04
+sudo dkms add -m dta -v 2014.09
+sudo dkms build -m dta -v 2014.09
+sudo dkms install -m dta -v 2014.09
 
 # to install it for a specific kernel version
-dkms build -m dta -v 2014.04 -k 3.8.0-42-generic/x86_64
+dkms build -m dta -v 2014.09 -k 3.8.0-42-generic/x86_64
 
 # to build the DKMS debian packages.  Packages are placed into
-sudo dkms mkdeb -m dta -v 2014.04
+sudo dkms mkdeb -m dta -v 2014.09
 
 # update the sample packages
-cp /var/lib/dkms/dta/2014.04/deb/dta-dkms_2014.04_all.deb sample-packages/
-cp ../dta_2014.04_i386.deb sample-packages/
+cp /var/lib/dkms/dta/2014.09/deb/dta-dkms_2014.09_all.deb sample-packages/
+cp ../dta_2014.09_i386.deb sample-packages/
 
 # Clean up
 ./clean.sh

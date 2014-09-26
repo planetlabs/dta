@@ -48,7 +48,7 @@
 #define ADDRM_TYPE_FECCOLUMN   2    // Index 2
 
 
-//+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ RtpListEntry +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- RtpListEntry -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
 // Describes an entry for the storage of RTP packets 
 //

@@ -131,7 +131,7 @@ static DtStatus  DtuEventsSetEvent(
         {
             // Remove oldest event
             DtDbgOut(AVG, EVENTS, "Max. number of events. Remove old event");
-            DtMemCopy(&pDtuEvents->m_PendingEvents[0],
+            DtMemMove(&pDtuEvents->m_PendingEvents[0],
                                          &pDtuEvents->m_PendingEvents[1],
                                          sizeof(DtuEvent) * (MAX_PENDING_EVENTS - 1));
             pDtuEvent = &pDtuEvents->m_PendingEvents[MAX_PENDING_EVENTS - 1];
@@ -297,7 +297,7 @@ DtStatus  DtuEventsGet(
             if (pDtuEvents->m_NumPendingEvents != 0)
             {   
                 // Remove the old event
-                DtMemCopy(&pDtuEvents->m_PendingEvents[0],
+                DtMemMove(&pDtuEvents->m_PendingEvents[0],
                                        &pDtuEvents->m_PendingEvents[1],
                                        sizeof(DtuEvent) * pDtuEvents->m_NumPendingEvents);
             }
