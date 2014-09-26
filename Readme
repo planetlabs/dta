@@ -1,0 +1,145 @@
+Simple builder for the DekTec driver (2014.04 version)
+
+# ############################################################ 
+# Sample packages are in sample-packages/
+wget https://github.com/breu/dta/raw/2014.04/sample-packages/dta-dkms_2014.04_all.deb
+wget https://github.com/breu/dta/raw/2014.04/sample-packages/dta_2014.04_i386.deb
+apt-get install dkms
+dpkg -i dta-dkms_2014.04_all.deb dta_2014.04_i386.deb
+# ############################################################ 
+
+
+# ############################################################ 
+# Generic notes for building a new version.
+# ############################################################ 
+
+# install packages for building
+sudo apt-get install devscripts debhelper
+
+# grab the new tarball and extract
+cd dta
+wget http://www.dektec.com/Products/SDK/LinuxSDK/Downloads/LinuxSDK.tar.gz
+tar zfxv LinuxSDK.tar.gz
+
+# update version numbers
+vi debian/changelog debian/files debian/dta/DEBIAN/control dkms.conf
+
+# check for changes in Makefile
+diff Drivers/Dta/Source/Linux/Makefile Drivers/Dta/Source/Linux/Makefile.dkms
+
+# Extract the binaries from the self extracting shell script
+./extract-binaries.sh
+
+# Build the Binary packages
+debuild -b -us -uc
+
+# Build the kernel driver package.  We cheat and use the DKMS
+# tools to do this so you have to install it on a machine at
+# least once.
+sudo mkdir -p /usr/src/dta-2014.04
+sudo cp -dpR ../dta/dta-dkms-mkdeb /usr/src/dta-2014.04/
+sudo cp -dpR ../dta/Drivers /usr/src/dta-2014.04/
+sudo cp -dpR ../dta/Common /usr/src/dta-2014.04/
+sudo cp -dpR ../dta/dkms.conf /usr/src/dta-2014.04/
+
+sudo dkms add -m dta -v 2014.04
+sudo dkms build -m dta -v 2014.04
+sudo dkms install -m dta -v 2014.04
+
+# to install it for a specific kernel version
+dkms build -m dta -v 2014.04 -k 3.8.0-42-generic/x86_64
+
+# to build the DKMS debian packages.  Packages are placed into
+sudo dkms mkdeb -m dta -v 2014.04
+
+# update the sample packages
+cp /var/lib/dkms/dta/2014.04/deb/dta-dkms_2014.04_all.deb sample-packages/
+cp ../dta_2014.04_i386.deb sample-packages/
+
+# Clean up
+./clean.sh
+
+
+--------------------------------------------------------------------------------
+- Readme for DekTec's Linux SDK
+--------------------------------------------------------------------------------
+
+The Linux SDK provides developers with a driver and an API for using DekTec's
+DVB/MPEG-2 PCI/PCIe and USB-2 devices in applications running under Linux.
+
+The Linux SDK consists of:
+ - Dta:           Linux driver for DTA-100, DTA-102, DTA-105, DTA-107(S2),
+                  DTA-110(T), DTA-111, DTA-112, DTA-115, DTA-116, DTA-120,
+                  DTA-122, DTA-124, DTA-140, DTA-145, DTA-160, DTA-545, 
+                  DTA-2107, DTA-2131, DTA-2135, DTA-2136, DTA-2137,
+				  DTA-2139, DTA-2142, DTA-2144, DTA-2145, DTA-2152 
+				  and DTA-2160;
+ - DtaNw:         Network driver for DTA-160 and DTA-2160;
+ - Dtu:           Linux driver for DTU-205, DTU-215, DTU-225, DTU-234, DTU-235,
+                  DTU-236 and DTU-245;
+ - DTAPI:         C++ API that wraps the driver calls into an easy-to-use and
+                  object-oriented programming interface.
+ - DtapiService:  DTAPI daemon (service) that controls demodulator boards (e.g.
+                  DTU-235, DTU-236, DTA-2131, DTA-2135, DTA-2136, DTA-2137
+				  or DTA-2139).
+
+To use the SDK, you first have to compile the Dta, DtaNw and Dtu drivers.
+The DTAPI is provided as precompiled binary without the source code. Please refer
+to the readme files in the Dtu-, DtaNw- and Dta-directories for additional
+compilation, installation and usage instructions.
+
+Extracting LinuxSDK.tar.gz will lead to the following directory structure:
+
+ - LinuxSDK
+   |
+   |- License              License agreement for this package
+   | 
+   |- Common               (Common sources)
+   |  |- Import
+   |  |- Source
+   |
+   |
+   |- Drivers
+   |  |- Dta               (Driver for DTA-series PCI/PCIe cards)
+   |  |  |- Source
+   |  |  |  |- Linux       (Contains Dta driver makefile)
+   |  |
+   |  |- DtaNw             (Network driver for DTA-series PCI/PCIe cards)
+   |  |  |- Source          
+   |  |  |  |- Linux       (Contains DtaNw driver makefile)
+   |  |
+   |  |- Dtu               (Driver for DTU-series USB devices)
+   |  |  |- Source
+   |  |  |  |- Linux       (Contains Dtu driver makefile)
+   |
+   |
+   |- DtDrvCommon          (Common driver sources)
+   |  |- Source
+   |
+   |
+   |- DtSal                (Software-Abstraction-Layer (used by drivers))
+   |  |- Source
+   |
+   |
+   |- DtapiService         (DTAPI service/daemon)
+   |  |- DtapiService.bin  (self-extracting binairy installer for DtapiService)
+   |
+   |
+   |- DTAPI                (C++ wrapper library)
+   |  |- Doc               (Documentation)
+   |  |- Include           (DTAPI.h include file)
+   |  |- Lib
+   |    |- GCC4.1.2        (Contains DTAPI object file compiled with GCC 4.1.2)
+   |    |  |- DTAPI.o      (32-bit version)
+   |    |  |- DTAPI64.o    (64-bit version)
+   |    |
+   |    |- GCC4.4.6        (Contains DTAPI object file compiled with GCC 4.4.6)
+   |       |- DTAPI.o      (32-bit version)
+   |       |- DTAPI64.o    (64-bit version)
+
+--------------------------------------------------------------------------------
+- Version info: 
+--------------------------------------------------------------------------------
+
+Refer to the "SDK - Revision History.pdf" document for an overview of the 
+versions included in the release.

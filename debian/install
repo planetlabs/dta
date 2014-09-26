@@ -1,0 +1,2 @@
+DtapiServiced usr/sbin
+DtapiServiceInit etc/init.d

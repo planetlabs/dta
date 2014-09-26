@@ -1,0 +1,13 @@
+Source: dta
+Section: electronics
+Priority: extra
+Maintainer: Joe Breu <breu@planet.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.2
+Homepage: http://www.dektec.com/Downloads/DriversSDKs.asp
+
+Package: dta
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: 32bit DekTec DTA Binary
+ This package only includes the 32bit DekTec installer
