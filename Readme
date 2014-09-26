@@ -2,8 +2,8 @@ Simple builder for the DekTec driver (2014.09 version)
 
 # ############################################################ 
 # Sample packages are in sample-packages/
-wget https://github.com/breu/dta/raw/2014.09/sample-packages/dta-dkms_2014.09_all.deb
-wget https://github.com/breu/dta/raw/2014.09/sample-packages/dta_2014.09_i386.deb
+wget https://github.com/planetlabs/dta/raw/2014.09/sample-packages/dta-dkms_2014.09_all.deb
+wget https://github.com/planetlabs/dta/raw/2014.09/sample-packages/dta_2014.09_i386.deb
 apt-get install dkms
 dpkg -i dta-dkms_2014.09_all.deb dta_2014.09_i386.deb
 # ############################################################ 
