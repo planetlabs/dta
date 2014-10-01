@@ -37,10 +37,11 @@ debuild -b -us -uc
 # tools to do this so you have to install it on a machine at
 # least once.
 sudo mkdir -p /usr/src/dta-2014.04
-sudo cp -dpR ../dta/dta-dkms-mkdeb /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/Drivers /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/Common /usr/src/dta-2014.04/
-sudo cp -dpR ../dta/dkms.conf /usr/src/dta-2014.04/
+sudo cp -dpR dta-dkms-mkdeb /usr/src/dta-2014.04/
+sudo cp -dpR Drivers /usr/src/dta-2014.04/
+sudo cp -dpR Common /usr/src/dta-2014.04/
+sudo cp -dpR dkms.conf /usr/src/dta-2014.04/
+sudo cp dkms.post_* /usr/src/dta-2014.04/
 
 sudo dkms add -m dta -v 2014.04
 sudo dkms build -m dta -v 2014.04
