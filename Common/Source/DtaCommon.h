@@ -131,6 +131,7 @@ enum {
     FUNC_DTA_RS422_CMD,
     FUNC_DTA_GET_DEV_INFO3,
     FUNC_DTA_SET_VCXO
+
 };
 
 // Ioctl input data type
@@ -786,6 +787,7 @@ ASSERT_SIZE(DtaIoctlDmaWriteInput, 4)
 #define DTA_SH_CHANTYPE_UNDEFINED      DT_SH_CHANTYPE_UNDEFINED
 #define DTA_SH_CHANTYPE_IPTX           DT_SH_CHANTYPE_IPTX
 #define DTA_SH_CHANTYPE_IPRX           DT_SH_CHANTYPE_IPRX
+#define DTA_SH_CHANTYPE_IPRX_V2        DT_SH_CHANTYPE_IPRX_V2   // Dynamic buf size layout
 
 // DTA HP Buf init command input data type
 typedef struct _DtaIoctlShBufCmdInitInput {
@@ -1339,7 +1341,7 @@ ASSERT_SIZE(DtaIoctlIpXxCmdSetControlInput, 8)
 // DTA_IP_TX_CMD_WRITENDISPCKT
 typedef struct _DtaIoctlIpTxCmdWriteNdisPcktInput {
     UInt  m_BufLen;
-    UInt8  m_Buf[0];                // Dynamic sized buffer    
+    UInt8  m_Buf[0];                 // Dynamic sized buffer
 } DtaIoctlIpTxCmdWriteNdisPcktInput;
 ASSERT_SIZE(DtaIoctlIpTxCmdWriteNdisPcktInput, 4)
 
@@ -1422,6 +1424,8 @@ ASSERT_SIZE(DtaIoctlIpTxCmdOutput, 8)
 #define DTA_IP_RX_CMD_GETIPPARS        11
 #define DTA_IP_RX_CMD_GETIPSTAT        12
 #define DTA_IP_RX_CMD_SETIPPARS2       13
+#define DTA_IP_RX_CMD_GETIPSTAT2       14
+#define DTA_IP_RX_CMD_SETUPBUFFER      15
 
 // DTA_IP_RX_CMD_GETSTATUS
 typedef struct _DtaIoctlIpRxCmdGetStatusInput {
@@ -1461,15 +1465,14 @@ ASSERT_SIZE(DtaIoctlIpRxCmdSetModeInput, 8)
 
 // Fec mode flags
 #define DTA_FEC_DISABLE          0
-#define DTA_FEC_2D               1       // FEC reconstruction
-#define DTA_FEC_2D_M1            1       // Mode1: FECdT = DVBdT + .5 * DVBdT
-#define DTA_FEC_2D_M2            2       // Mode2: FECdT = DVBdT
+#define DTA_FEC_2D               1      // FEC reconstruction
+#define DTA_FEC_2D_M1            1      // Mode1: FECdT = DVBdT + .5 * DVBdT
+#define DTA_FEC_2D_M2            2      // Mode2: FECdT = DVBdT
 
 // Mode
 #define DTA_IP_NORMAL            0
-#define DTA_IP_TX_DBLBUF         1
-#define DTA_IP_RX_DBLBUF         2
-#define DTA_IP_RX_FAILOVER       3
+#define DTA_IP_TX_2022_7         1
+#define DTA_IP_RX_2022_7         2
 
 // Flags
 #define DTA_IP_V4                1
@@ -1492,22 +1495,22 @@ ASSERT_SIZE(DtaIoctlIpRxCmdSetIpParsInput, 24)
 typedef struct _DtaIoctlIpRxCmdSetIpPars2Input {
     Int  m_Channel;
     // Primary link
-    UInt8  m_DstIp[16];              // Destination: IP address
-    UInt16  m_DstPort;               // Destination: port number
-    UInt8  m_SrcIp[16];              // Source: IP address
-    UInt16  m_SrcPort;               // Source: port number
-    Int  m_VlanId;                   // VLAN ID
+    UInt8  m_DstIp[16];             // Destination: IP address
+    UInt16  m_DstPort;              // Destination: port number
+    UInt8  m_SrcIp[16];             // Source: IP address
+    UInt16  m_SrcPort;              // Source: port number
+    Int  m_VlanId;                  // VLAN ID
     // Redundant link
-    UInt8  m_DstIp2[16];             // Destination: IP address
-    UInt16  m_DstPort2;              // Destination: port number
-    UInt8  m_SrcIp2[16];             // Source: IP address
-    UInt16  m_SrcPort2;              // Source: port number
-    Int  m_VlanId2;                  // VLAN ID
+    UInt8  m_DstIp2[16];            // Destination: IP address
+    UInt16  m_DstPort2;             // Destination: port number
+    UInt8  m_SrcIp2[16];            // Source: IP address
+    UInt16  m_SrcPort2;             // Source: port number
+    Int  m_VlanId2;                 // VLAN ID
     // Options
-    Int  m_Mode;
-    Int  m_Flags;
-    Int  m_Protocol;                 // Protocol: UDP/RTP
-    Int  m_FecMode;                  // Error correction mode
+    Int  m_Mode;                    // Normal/SMPTE_2022_7
+    Int  m_Flags;                   // Control flags: IPv4/IPv6
+    Int  m_Protocol;                // Protocol: UDP/RTP
+    Int  m_FecMode;                 // Error correction mode
 } DtaIoctlIpRxCmdSetIpPars2Input;
 ASSERT_SIZE(DtaIoctlIpRxCmdSetIpPars2Input, 100)
 
@@ -1519,8 +1522,8 @@ ASSERT_SIZE(DtaIoctlIpRxCmdGetIpParsInput, 4)
 
 typedef struct _DtaIoctlIpRxCmdGetIpParsOutput {
     Int  m_Protocol;                // Protocol: UDP/RTP/Unknown
-    Int  m_FecNumRows;              // @D@ = #rows in FEC matrix
-    Int  m_FecNumCols;              // @L@ = #columns in FEC matrix
+    Int  m_FecNumRows;              // 'D' = #rows in FEC matrix
+    Int  m_FecNumCols;              // 'L' = #columns in FEC matrix
     Int  m_NumTpPerIp;              // 0: Not detected
 } DtaIoctlIpRxCmdGetIpParsOutput;
 ASSERT_SIZE(DtaIoctlIpRxCmdGetIpParsOutput, 16)
@@ -1533,12 +1536,66 @@ ASSERT_SIZE(DtaIoctlIpRxCmdGetIpStatInput, 4)
 
 typedef struct _DtaIoctlIpRxCmdGetIpStatOutput {
     UInt  m_TotNumIPPackets;
-    UInt  m_LostIPPacketsBeforeFec;     // (BER before FEC)
-    UInt  m_LostIPPacketsAfterFec;      // (BER after FEC)
+    UInt  m_LostIPPacketsBeforeFec; // (BER before FEC)
+    UInt  m_LostIPPacketsAfterFec;  // (BER after FEC)
     UInt  m_Reserved1;
     UInt  m_Reserved2;
 } DtaIoctlIpRxCmdGetIpStatOutput;
 ASSERT_SIZE(DtaIoctlIpRxCmdGetIpStatOutput, 20)
+
+// DTA_IP_RX_CMD_GETIPSTAT2
+typedef struct _DtaIoctlIpRxCmdGetIpStat2Input {
+    Int  m_Channel;
+} DtaIoctlIpRxCmdGetIpStat2Input;
+ASSERT_SIZE(DtaIoctlIpRxCmdGetIpStat2Input, 4)
+
+typedef struct _DtaIoctlIpRxCmdGetIpStat2Output {
+    UInt  m_TotNumIPPackets;
+    UInt  m_LostIPPacketsBeforeFec; // (BER before FEC)
+    UInt  m_LostIPPacketsAfterFec;  // (BER after FEC)
+    UInt  m_Spare;                  // Align;
+
+    UInt  m_NumIpPacketsReceived[2];
+    UInt  m_NumIpPacketsLost[2];
+
+    UInt  m_BerNumIpPacketsMainSec;
+    UInt  m_BerNumIpPacketsLostMainSec;
+    UInt  m_BerNumIpPacketsMainMin;
+    UInt  m_BerNumIpPacketsLostMainMin;
+    
+    UInt  m_BerNumIpPacketsSec[2];
+    UInt  m_BerNumIpPacketsLostSec[2];
+    UInt  m_BerNumIpPacketsMin[2];
+    UInt  m_BerNumIpPacketsLostMin[2];
+    
+    UInt64A  m_DelayFactorSec[2];
+    UInt64A  m_DelayFactorMin[2];
+    UInt64A  m_MinIpatSec[2];
+    UInt64A  m_MaxIpatSec[2];
+    UInt64A  m_MinIpatMin[2];
+    UInt64A  m_MaxIpatMin[2];
+
+    Int64A  m_MinSkewSec;
+    Int64A  m_MaxSkewSec;
+    Int64A  m_MinSkewMin;
+    Int64A  m_MaxSkewMin;
+} DtaIoctlIpRxCmdGetIpStat2Output;
+ASSERT_SIZE(DtaIoctlIpRxCmdGetIpStat2Output, 208)
+
+
+// DTA_IP_RX_CMD_SETUPBUFFER
+typedef struct _DtaIoctlIpRxCmdSetupBufferInput {
+    Int  m_Channel;
+    UInt  m_TsBufSize;              // Size of Ts buffer shared between DTAPI/DRIVER
+                                    // (including wrap area, excluding header)
+    UInt  m_IpBufSize;              // Size of IP buffer used only by driver for storing
+                                    // RTP/FEC packets
+    UInt  m_JumboPktSize;           // Max. size of jumbo packets
+    //UInt  m_MaxBitrate;             // Max. Rx bitrate: needed in driver??
+    UInt  m_MinPktDelay;
+    UInt  m_MaxPktOutOfSync;
+} DtaIoctlIpRxCmdSetupBufferInput;
+ASSERT_SIZE(DtaIoctlIpRxCmdSetupBufferInput, 24)
 
 // Ioctl input data type
 typedef struct _DtaIoctlIpRxCmdInput {
@@ -1556,7 +1613,9 @@ typedef struct _DtaIoctlIpRxCmdInput {
         DtaIoctlIpRxCmdGetIpParsInput  m_GetIpPars;
         DtaIoctlIpRxCmdSetIpParsInput  m_SetIpPars;
         DtaIoctlIpRxCmdGetIpStatInput  m_GetIpStat;
+        DtaIoctlIpRxCmdGetIpStat2Input  m_GetIpStat2;
         DtaIoctlIpRxCmdSetIpPars2Input  m_SetIpPars2;
+        DtaIoctlIpRxCmdSetupBufferInput  m_SetupBuffer;
     } m_Data;
 } DtaIoctlIpRxCmdInput;
 ASSERT_SIZE(DtaIoctlIpRxCmdInput, 108)
@@ -1570,9 +1629,10 @@ typedef struct _DtaIoctlIpRxCmdOutput {
         DtaIoctlIpRxCmdGetTsRateOutput  m_GetTsRate;
         DtaIoctlIpRxCmdGetIpParsOutput  m_GetIpPars;
         DtaIoctlIpRxCmdGetIpStatOutput  m_GetIpStat;
+        DtaIoctlIpRxCmdGetIpStat2Output  m_GetIpStat2;
     } m_Data;
 } DtaIoctlIpRxCmdOutput;
-ASSERT_SIZE(DtaIoctlIpRxCmdOutput, 20)
+ASSERT_SIZE(DtaIoctlIpRxCmdOutput, 208)
 
 #ifdef WINBUILD
     #define DTA_IOCTL_IP_RX_CMD  CTL_CODE(DTA_DEVICE_TYPE, FUNC_DTA_IP_RX_CMD, \

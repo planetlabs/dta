@@ -737,7 +737,7 @@ static Int  DtaMapRegsToUserSpace(
     {
         if (pUserMapping->m_FileObject.m_pFile == pFile) 
         {
-            DtDbgOut(ERR, IAL, "[%d] Error register already mapped into userspace");
+            DtDbgOut(ERR, IAL, "Error register already mapped into userspace");
 
             // Release memory map mutex
             DtFastMutexRelease(&pDvcData->m_UserMapMutex);

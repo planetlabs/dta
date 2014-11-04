@@ -2540,8 +2540,8 @@ DtStatus  DtaNonIpMatrixWriteBlackFrame(DtaNonIpPort*  pNonIpPort, Int64  Frame)
                 // Line number
                 LN0 = ((l&0x80)==0 ? 0x200 : 0x000) | ((l&0x07F)<<2);
                 LN1 = 0x200 | ((l>>5)&0x3C);
-                *pEav++ = LN0; *pEav++ = LN1; 
-                *pEav++ = LN0; *pEav++ = LN1; 
+                *pEav++ = LN0; *pEav++ = LN0; 
+                *pEav++ = LN1; *pEav++ = LN1; 
                 // CRC (just a place holder, HW will compute real CRC)
                 *pEav++ = 0x000; *pEav++ = 0x000; 
                 *pEav++ = 0x000; *pEav++ = 0x000; 

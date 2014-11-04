@@ -177,6 +177,8 @@ DtStatus  DtuNonIpInit(
                                                                  pNonIpPort->m_PortIndex);
     pNonIpPort->m_CapGenRef = DtPropertiesGetBool(pPropData, "CAP_GENREF",
                                                                  pNonIpPort->m_PortIndex);
+    pNonIpPort->m_CapGpsRef = DtPropertiesGetBool(pPropData, "CAP_GPSREF",
+                                                                 pNonIpPort->m_PortIndex);
     pNonIpPort->m_CapSwS2Apsk = DtPropertiesGetBool(pPropData, "CAP_SWS2APSK",
                                                                  pNonIpPort->m_PortIndex); 
     pNonIpPort->m_CapIsoBw = DtPropertiesGetBool(pPropData, "CAP_BW",
@@ -623,10 +625,13 @@ DtStatus  DtuNonIpInit(
     if (pNonIpPort->m_CapFailSafe)
         pNonIpPort->m_IoCfg[DT_IOCONFIG_FAILSAFE].m_Value = DT_IOCONFIG_FALSE;
     
+    // DT_IOCONFIG_GPSREF
+    if (pNonIpPort->m_CapGpsRef)   
+        pNonIpPort->m_IoCfg[DT_IOCONFIG_GPSREF].m_Value = DT_IOCONFIG_FALSE;
+
     // DT_IOCONFIG_GENLOCK
     if (pNonIpPort->m_CapGenLocked)
         pNonIpPort->m_IoCfg[DT_IOCONFIG_GENLOCKED].m_Value = DT_IOCONFIG_FALSE;
-
 
     // Initialize register mappings
     pNonIpPort->m_RxRegsOffset = -1;
@@ -1016,6 +1021,8 @@ DtStatus  DtuNonIpIoConfigSet(
     case DT_IOCONFIG_GENLOCKED:
         // Genlock reference input
     case DT_IOCONFIG_GENREF:
+        // GPS-clock reference
+    case DT_IOCONFIG_GPSREF:
         // DVB-S2 APSK switch
     case DT_IOCONFIG_SWS2APSK:
     default:

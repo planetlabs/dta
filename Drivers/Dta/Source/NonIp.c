@@ -59,6 +59,8 @@ static DtStatus  DtaNonIpIoConfigSetGenLocked(DtaNonIpPort* pNonIpPort,  Int Gro
                                                                DtaIoConfigValue CfgValue);
 static DtStatus  DtaNonIpIoConfigSetGenRef(DtaNonIpPort* pNonIpPort, Int Group,
                                                                DtaIoConfigValue CfgValue);
+static DtStatus  DtaNonIpIoConfigSetGpsRef(DtaNonIpPort* pNonIpPort, Int Group,
+                                                               DtaIoConfigValue CfgValue);
 static DtStatus  DtaNonIpIoConfigSetFracMode(DtaNonIpPort* pNonIpPort, Int Group,
                                                                DtaIoConfigValue CfgValue);
 
@@ -300,9 +302,10 @@ DtStatus  DtaNonIpInit(
                                                                  pNonIpPort->m_PortIndex);
     pNonIpPort->m_CapGenRef = DtPropertiesGetBool(pPropData, "CAP_GENREF",
                                                                  pNonIpPort->m_PortIndex);
-    pNonIpPort->m_CapSwS2Apsk = DtPropertiesGetBool(pPropData, "CAP_SWS2APSK",
+    pNonIpPort->m_CapGpsRef = DtPropertiesGetBool(pPropData, "CAP_GPSREF",
                                                                  pNonIpPort->m_PortIndex);
-
+    pNonIpPort->m_CapSwS2Apsk = DtPropertiesGetBool(pPropData, "CAP_SWS2APSK",
+                                                                 pNonIpPort->m_PortIndex); 
 
     // Implementation details properties
 
@@ -794,6 +797,10 @@ DtStatus  DtaNonIpInit(
     // DT_IOCONFIG_GENLOCK
     if (pNonIpPort->m_CapGenLocked)
         pNonIpPort->m_IoCfg[DT_IOCONFIG_GENLOCKED].m_Value = DT_IOCONFIG_FALSE;
+    
+    // DT_IOCONFIG_GPSREF
+    if (pNonIpPort->m_CapGpsRef)   
+        pNonIpPort->m_IoCfg[DT_IOCONFIG_GPSREF].m_Value = DT_IOCONFIG_FALSE;
 
     // DT_IOCONFIG_FRACMODE
     if (pNonIpPort->m_CapFracMode)
@@ -1801,12 +1808,17 @@ DtStatus  DtaNonIpIoConfigSet(
         Status = DtaNonIpIoConfigSetGenRef(pNonIpPort, Group, CfgValue);
         break;
 
+        // GPS-clock reference
+    case DT_IOCONFIG_GPSREF:
+        Status = DtaNonIpIoConfigSetGpsRef(pNonIpPort, Group, CfgValue);
+        break;
+
         // Fractional mode
     case DT_IOCONFIG_FRACMODE:
         Status = DtaNonIpIoConfigSetFracMode(pNonIpPort, Group, CfgValue);
         break;
 
-        // Fail-over relais available
+        // DVB-S2 APSK mode
     case DT_IOCONFIG_SWS2APSK:
         Status = DtaNonIpIoConfigSetSwS2Apsk(pNonIpPort, Group, CfgValue);
         break;
@@ -2247,6 +2259,10 @@ static DtStatus  DtaNonIpIoConfigSetRfClkSel(
             break;
         // Select internal clock
         DtaRegRfCtrl3SetRfClkSel(pNonIpPort->m_pRfRegs, 1);
+       
+        // Internal clock selected GPS-SYNC is switched off
+        if (pNonIpPort->m_CapGpsRef)   
+            pNonIpPort->m_IoCfg[DT_IOCONFIG_GPSREF].m_Value = DT_IOCONFIG_FALSE;
         break;
     case DT_IOCONFIG_RFCLKEXT:
         DT_ASSERT(pNonIpPort->m_CapRfClkExt);
@@ -2282,6 +2298,7 @@ static DtStatus  DtaNonIpIoConfigSetSpiClkSel(
             break;
         // Select internal clock
         DtaRegDvbSpiCtrlSetExtClkSelect(pNonIpPort->m_pSpiRegs, 0);
+
         break;
     case DT_IOCONFIG_SPICLKEXT:
         DT_ASSERT(pNonIpPort->m_CapSpiClkExt);
@@ -2585,6 +2602,44 @@ DtStatus  DtaNonIpIoConfigSetGenRef(DtaNonIpPort* pNonIpPort, Int Group,
     Status = DtaGenlockApplyGenRefConfig(pDvcData);
     if (!DT_SUCCESS(Status))
         pNonIpPort->m_IoCfg[Group] = OldCfgValue;   // Restore original config
+    return Status;
+}
+
+//.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpIoConfigSetGpsRef -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+static DtStatus  DtaNonIpIoConfigSetGpsRef(
+    DtaNonIpPort* pNonIpPort,
+    Int Group,
+    DtaIoConfigValue CfgValue)
+{
+    DtStatus  Status = DT_STATUS_OK;
+    DtaIoConfigValue ClkSelCfgValue = pNonIpPort->m_IoCfg[DT_IOCONFIG_RFCLKSEL];
+
+    // Check port supports genlocking
+    switch (CfgValue.m_Value)
+    {
+    case DT_IOCONFIG_FALSE:
+        DT_ASSERT(pNonIpPort->m_CapGpsRef && pNonIpPort->m_CapRfClkInt);
+        // GPS-sync off caches the new state and switches to the internal clock
+        ClkSelCfgValue.m_Value = DT_IOCONFIG_RFCLKINT;
+        break;
+    case DT_IOCONFIG_TRUE:
+        DT_ASSERT(pNonIpPort->m_CapGpsRef && pNonIpPort->m_CapRfClkInt);
+        // GPS-sync on caches the new state and switches to the external clock
+        ClkSelCfgValue.m_Value = DT_IOCONFIG_RFCLKEXT;
+        break;
+    default:
+        DtDbgOut(ERR, NONIP, "Invalid Config. Group: %d, Value: %d, SubValue: %d",
+                                            Group, CfgValue.m_Value, CfgValue.m_SubValue);
+        return DT_STATUS_NOT_SUPPORTED;
+    }
+
+    // Apply new clock selection
+    Status = DtaNonIpIoConfigSetRfClkSel(pNonIpPort,DT_IOCONFIG_RFCLKSEL, ClkSelCfgValue);
+
+    if (Status == DT_STATUS_OK)
+        pNonIpPort->m_IoCfg[Group] = CfgValue;  // Save new config to the cache
+
     return Status;
 }
 

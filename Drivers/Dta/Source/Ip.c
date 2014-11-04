@@ -1327,7 +1327,7 @@ DtaShBuffer*  DtaIpGetSharedBuffer(
     UserIpRxChannel* pIpRxChannel = NULL;
     UserIpTxChannel* pIpTxChannel = NULL;
 
-    if (ChannelType == DTA_SH_CHANTYPE_IPRX)
+    if (ChannelType==DTA_SH_CHANTYPE_IPRX || ChannelType==DTA_SH_CHANTYPE_IPRX_V2)
     {      
       pIpRxChannel = DtaIpRxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
       if (pIpRxChannel != NULL)
@@ -1343,9 +1343,46 @@ DtaShBuffer*  DtaIpGetSharedBuffer(
     return NULL;
 }
 
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIpSharedBufferClosing -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+//
+DtStatus  DtaIpSharedBufferClosing(DtaIpDevice* pIpDevice, Int ChannelIndex, 
+                                                                          Int ChannelType)
+{   
+    UserIpRxChannel* pIpRxChannel = NULL;
+    UserIpTxChannel* pIpTxChannel = NULL;
+
+    if (ChannelType == DTA_SH_CHANTYPE_IPTX)
+    {
+        pIpTxChannel = DtaIpTxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
+        if (pIpTxChannel != NULL)
+        {          
+            pIpTxChannel->m_pTxBufferHead = NULL;
+            return DT_STATUS_OK;
+        }
+    } else if (ChannelType == DTA_SH_CHANTYPE_IPRX)
+    { 
+        pIpRxChannel = DtaIpRxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
+        if (pIpRxChannel != NULL)
+        {
+            pIpRxChannel->m_pBufferHeader = NULL;
+            return DT_STATUS_OK;
+        }       
+    } else if (ChannelType == DTA_SH_CHANTYPE_IPRX_V2)
+    { 
+        pIpRxChannel = DtaIpRxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
+        if (pIpRxChannel != NULL)
+        {        
+            pIpRxChannel->m_pBufferHeader = NULL;
+            return DT_STATUS_OK;
+        }
+    }
+    return DT_STATUS_NOT_FOUND;
+}
+
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIpSharedBufferReady -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 //
 // Notify IP channels that the shared buffer is created for this channel
+//
 DtStatus  DtaIpSharedBufferReady(
     DtaIpDevice* pIpDevice, 
     Int ChannelIndex, 
@@ -1372,30 +1409,62 @@ DtStatus  DtaIpSharedBufferReady(
                                                                  sizeof(IpTxBufferHeader);
             return DT_STATUS_OK;
         }
-    }
-     
-    if (ChannelType == DTA_SH_CHANTYPE_IPRX)
+    } else if (ChannelType == DTA_SH_CHANTYPE_IPRX)
     { 
         // Buffer contents:
         // |======|======================|=========|====================|
-        // |Header|FIFO                  |WrapArea | Rtp/FEC scratchpad
+        // |Header|FIFO                  |WrapArea | RTP/FEC scratchpad
         //                               |Used by driver only
+        // The wrap area is only used for easy data copiing to TS buffer when free TS buf
+        // size is less then the TS packet size
+        pIpRxChannel = DtaIpRxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
+        if (pIpRxChannel != NULL)
+        {   Int  RtpBufSize;
+            pIpRxChannel->m_pBufferHeader = (IpRxBufferHeader*)
+                                                   pIpRxChannel->m_SharedBuffer.m_pBuffer;
+            pIpRxChannel->m_BufSize = pIpRxChannel->m_pBufferHeader->m_BufSize;
+            pIpRxChannel->m_pFifo = pIpRxChannel->m_SharedBuffer.m_pBuffer +
+                                                                 sizeof(IpRxBufferHeader);
+            pIpRxChannel->m_FifoSize = pIpRxChannel->m_pBufferHeader->m_BufSize - 
+                                               DTA_IPRX_BUFWRAPSIZE - DTA_IPRX_BUFRTPSIZE;
+            // We create the RTP list also in the IP-buffer
+            pIpRxChannel->m_pRtpListEntries = pIpRxChannel->m_pFifo + 
+                                          pIpRxChannel->m_FifoSize + DTA_IPRX_BUFWRAPSIZE;
+            RtpBufSize =  DTA_IPRX_MAX_PACKET_LENGTH * DTA_IPRX_MAX_RTP_PACKETS;
+            // Initialize RTP List entries
+            pIpRxChannel->m_pRtpBuffer = DtaIpRxRtpListsInit(pIpRxChannel, RtpBufSize);
+            // The jumbo packets are stored in the RTP buffers.
+            pIpRxChannel->m_pJumboPktBuffer = pIpRxChannel->m_pRtpBuffer;
+            pIpRxChannel->m_MaxJumboPktSize = 0x10000; // 64kb
+            pIpRxChannel->m_MaxPacketOutOfSync = 0;
+            pIpRxChannel->m_MinPacketDelay = 0;
+            return DT_STATUS_OK;
+        }       
+    } else if (ChannelType == DTA_SH_CHANTYPE_IPRX_V2)
+    { 
+        // Buffer contents:
+        // |======|======================|=========|====================|
+        // |Header|FIFO                  |WrapArea | RTP/FEC scratchpad
+        //                               |Used by driver only
+        // The wrap area is only used for easy data copying to TS buffer when free TS buf
+        // size is less then the TS packet size
         pIpRxChannel = DtaIpRxUserChGet(&pIpDevice->m_IpUserChannels, ChannelIndex);
         if (pIpRxChannel != NULL)
         {        
             pIpRxChannel->m_pBufferHeader = (IpRxBufferHeader*)
                                                    pIpRxChannel->m_SharedBuffer.m_pBuffer;
-            pIpRxChannel->m_pFifo = pIpRxChannel->m_SharedBuffer.m_pBuffer + 
+            pIpRxChannel->m_BufSize = pIpRxChannel->m_pBufferHeader->m_BufSize;
+            pIpRxChannel->m_pFifo = pIpRxChannel->m_SharedBuffer.m_pBuffer +
                                                                  sizeof(IpRxBufferHeader);
-
-            pIpRxChannel->m_FifoSize = pIpRxChannel->m_pBufferHeader->m_BufSize - 
-                                               DTA_IPRX_BUFWRAPSIZE - DTA_IPRX_BUFRTPSIZE;
-
-            pIpRxChannel->m_pWrapArea = pIpRxChannel->m_pFifo + pIpRxChannel->m_FifoSize;
-
-            pIpRxChannel->m_pRtpBuffer = pIpRxChannel->m_pWrapArea + DTA_IPRX_BUFWRAPSIZE;
+            pIpRxChannel->m_FifoSize = 0;
+            pIpRxChannel->m_pRtpBuffer = NULL;
+            pIpRxChannel->m_pRtpListEntries = NULL;
+            pIpRxChannel->m_pJumboPktBuffer = NULL;
+            pIpRxChannel->m_MaxJumboPktSize = 0;
+            pIpRxChannel->m_MaxPacketOutOfSync = 0;
+            pIpRxChannel->m_MinPacketDelay = 0;
             return DT_STATUS_OK;
-        }       
+        }
     }
     return DT_STATUS_NOT_FOUND;
 }

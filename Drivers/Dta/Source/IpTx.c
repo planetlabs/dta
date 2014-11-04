@@ -812,7 +812,7 @@ DtStatus DtaIpTxUserChSetIpPars(DtaIpUserChannels* pIpUserChannels, Int ChannelI
     pIpTxChannel->m_IpParsValid = TRUE;
     pIpTxChannel->m_LastReadOffset = 0;
         
-    if (Mode == DTA_IP_TX_DBLBUF)
+    if (Mode == DTA_IP_TX_2022_7)
     {
         Bool  IpV6 = (Flags & DTA_IP_V6) != 0;
         Bool  UseVlan = (VlanId!=0 || VlanPriority!=0);
@@ -1243,8 +1243,8 @@ void  DtaIpTxRtProcessPacketsType2Dpc(DtDpcArgs* pArgs)
     UInt64  CurTime;
 
 #ifdef  _DEBUG
-    UInt64  Delay;
-    UInt64  StartTime;
+    //UInt64  Delay;
+    //UInt64  StartTime;
     Bool  PacketTooOldMsg;
     Bool FirstTime = TRUE;
 #endif
@@ -1318,7 +1318,7 @@ void  DtaIpTxRtProcessPacketsType2Dpc(DtDpcArgs* pArgs)
     while (pIpTxChannel != NULL)
     {
         DblBuf = pIpTxChannel->m_IpParsValid && 
-                                             pIpTxChannel->m_IpParsMode==DTA_IP_TX_DBLBUF;
+                                             pIpTxChannel->m_IpParsMode==DTA_IP_TX_2022_7;
 
         if (pIpTxChannel->m_TxControl != DT_TXCTRL_SEND)
         {
@@ -2080,7 +2080,7 @@ UserIpTxChannel*  DtaIpTxUserChCreate(
 void  DtaIpTxUserChInitRWPointers(UserIpTxChannel* pIpTxChannel)
 { 
     // Set read/write pointer to start
-    if(pIpTxChannel->m_SharedBuffer.m_Initialised && 
+    if (pIpTxChannel->m_SharedBuffer.m_Initialised && 
                                                     pIpTxChannel->m_pTxBufferHead != NULL)
     {
         pIpTxChannel->m_pTxBufferHead->m_ReadOffset = 0;

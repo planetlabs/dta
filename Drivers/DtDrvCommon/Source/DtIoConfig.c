@@ -32,9 +32,14 @@
 
 // Implement kstrtos64 for kernel versions which don't include it.
 #ifdef LINBUILD
+#if defined(RHEL_RELEASE_CODE)
+#if RHEL_RELEASE_CODE>=RHEL_RELEASE_VERSION(6,4)
+#define SKIP_KSTRTOS_FOR_RHEL
+#endif
+#endif
 // Split condition in two lines to make sure windows builds don't try to parse
 // the part below.
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
+#if LINUX_VERSION_CODE<KERNEL_VERSION(2,6,39) && !defined(SKIP_KSTRTOS_FOR_RHEL)
 int  kstrtos64(const char*  p, int Base, UInt64*  pRes)
 {
     *pRes = simple_strtoull(p, NULL, Base);

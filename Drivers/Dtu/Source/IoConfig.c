@@ -842,14 +842,14 @@ static DtStatus  DtuIoConfigUpdateValidate(
         {
         case DT_IOCONFIG_NONE:
             // Not applicable should only be set when we do not support ext RF clock
-            DT_ASSERT(!pNonIpPort->m_CapRfClkInt && !pNonIpPort->m_CapRfClkExt);
-            break;
-        case DT_IOCONFIG_RFCLKINT:
-            if (!pNonIpPort->m_CapRfClkInt)
-                return DT_STATUS_CONFIG_ERROR;
+            DT_ASSERT(!pNonIpPort->m_CapRfClkExt && !pNonIpPort->m_CapRfClkInt);
             break;
         case DT_IOCONFIG_RFCLKEXT:
             if (!pNonIpPort->m_CapRfClkExt)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_RFCLKINT:
+            if (!pNonIpPort->m_CapRfClkInt)
                 return DT_STATUS_CONFIG_ERROR;
             break;
         default:

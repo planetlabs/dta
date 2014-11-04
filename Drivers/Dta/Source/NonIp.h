@@ -276,6 +276,7 @@ typedef struct _DtaNonIpPort
     Bool  m_CapFailSafe;
     Bool  m_CapGenLocked;
     Bool  m_CapGenRef;
+    Bool  m_CapGpsRef;
     Bool  m_CapSwS2Apsk;
     Bool  m_CapRs422;
 

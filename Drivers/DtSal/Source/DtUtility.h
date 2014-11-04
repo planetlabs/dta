@@ -164,6 +164,18 @@ static __inline UInt16  DtUInt16ByteSwap(UInt16 Word)
 #endif
 }
 
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtUInt32ByteSwap -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+//
+static __inline UInt32  DtUInt32ByteSwap(UInt32 Dword)
+{
+#ifdef WINBUILD
+    return RtlUlongByteSwap(Dword);
+#else
+    return (Dword >> 24) | ((Dword >> 8) & 0x0000FF00 ) | ((Dword << 8) & 0x00FF0000) |
+                                                                            (Dword << 24);
+#endif
+}
+
 UInt  DtAnsiCharToUInt(char Char);
 UInt  DtAnsiCharArrayToUInt(char* pUIntString, UInt StrLen, UInt Base);
 UInt64  DtAnsiCharArrayToUInt64(char* pUIntString, UInt StrLen, UInt Base);

@@ -93,7 +93,7 @@ DtStatus  DtaShBufferIoctl(
         break;
 
     case DTA_SH_BUF_CMD_CLOSE:
-        pIoctlStr = "DTA_HP_BUF_CMD_CLOSE";
+        pIoctlStr = "DTA_SH_BUF_CMD_CLOSE";
         // We expect no output buffer
         OutReqSize = 0;
         break;
@@ -149,7 +149,6 @@ DtStatus  DtaShBufferIoctl(
         {
             DT_ASSERT(FALSE);
             // pLocalAccess = ...GetSliceBufferPointer
-
             return DT_STATUS_NOT_SUPPORTED;
         }
     } else {
@@ -230,6 +229,9 @@ DtStatus  DtaShBufferIoctl(
                                                 LocalAddressBufStart, LocalAddressBufEnd);
             break;
         case DTA_SH_BUF_CMD_CLOSE:
+            if (IsIpPort)
+                Status = DtaIpSharedBufferClosing(&pDvcData->m_IpDevice,
+                           pShBufCmdInput->m_ChannelIndex, pShBufCmdInput->m_ChannelType);
             Status = DtaShBufferClose(pShBuffer);
             break;
         default:

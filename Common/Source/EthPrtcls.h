@@ -513,7 +513,6 @@ typedef struct _DtaDmaRxHeader
 } DtaDmaRxHeader;
 
 // Default defines
-
 #define  DT_IP_MIN_ETH_PAYLOAD  60
 #define  DT_IP_MAX_ETH_PAYLOAD  1600
 #define  DT_IP_MAX_PACKET_SIZE  (ETHII_HDR_LENGTH + DT_IP_MAX_ETH_PAYLOAD)
@@ -523,10 +522,13 @@ typedef struct _DtaDmaRxHeader
                                                         // DMA header + max. packet length
 
 #define  DTA_IPRX_BUFWRAPSIZE       256
-#define  MAX_FEC_RECONSTR_ELEMENTS  20      // (L,D <= 20, L*D<=100, L+D max 20) for FEC
-#define  MAX_NUM_RTP_DVB_PACKETS    100     // (L*D = 100)
 #define  MAX_NUM_FEC_MATRIX         5       // (Last FEC max L*D after last packet -->
                                             // (L*D)+(L*D)+extra store for incoming pckts
+
+// Default values. Can be overruled by user
+#define  MAX_FEC_RECONSTR_ELEMENTS  20      // (L,D <= 20, L*D<=100, L+D max 20) for FEC
+#define  MAX_NUM_RTP_DVB_PACKETS    100     // (L*D = 100)
+
 
 #define  DTA_IPRX_MAX_RTP_PACKETS   ((MAX_FEC_RECONSTR_ELEMENTS +                        \
                                             MAX_NUM_RTP_DVB_PACKETS) * MAX_NUM_FEC_MATRIX)
@@ -535,7 +537,7 @@ typedef struct _DtaDmaRxHeader
 #define  DTA_IPRX_MAX_PACKET_LENGTH (DT_IP_MAX_PACKET_SIZE+sizeof(DtaDmaRxHeader))
 #define  DTA_IPRX_BUFRTPSIZE        (DTA_IPRX_MAX_RTP_PACKETS *                          \
                                                                DTA_IPRX_MAX_PACKET_LENGTH)
-                                                               
+#define DTA_IPRX_RTP_LIST_ENTRY_SIZE 40 // Estimated value of sizeof(RtpListEntry)
 
 typedef struct _DtaIpRawHeader 
 {
@@ -550,7 +552,7 @@ typedef struct _IpTxBufferHeader
     volatile UInt32  m_ReadOffset;          // Read offset; updated by DPC
     volatile UInt32  m_WriteOffset;         // Write offset; updated by DTAPI
     volatile UInt64  m_StartTimestamp;      // Timestamp after starting Tx channel
-    volatile UInt32  m_BufSize;             // Total allocated size of the packets buffer.
+    volatile UInt32  m_BufSize;             // Total allocated size of the packets buffer
                                             // BufSize is an exact multiple of the size of
                                             // of a time-stamped IP packet.
 } IpTxBufferHeader;
@@ -560,7 +562,13 @@ typedef struct _IpRxBufferHeader
 {
     volatile UInt32  m_FifoReadOffset;      // Read offset; updated by DTAPI
     volatile UInt32  m_FifoWriteOffset;     // Write offset; updated by driver Thread
-    volatile UInt32  m_BufSize;             // Allocated size of buffer without header.
+    volatile UInt32  m_BufSize;             
+    // m_Bufsize: Allocated size of buffer without the IpRxBufferHeader header
+    // This is the size including the TsBufSize(shared buffer between DTAPI/DRIVER) and
+    // IpBufSize (scratch buffer for RTP/FEC packets used in driver)
+    // The TsBufSize and IpBufSize are set to default values when allocating this buffer.
 } IpRxBufferHeader;
+
+
 
 #endif  // __ETHPRTCLS_H__

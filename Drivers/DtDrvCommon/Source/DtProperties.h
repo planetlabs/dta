@@ -42,6 +42,7 @@ typedef struct _DtProperty
     Int  m_PortIndex;
     Int  m_MinFw;
     Int  m_MinHw;
+    Int  m_MaxHw;
     DtPropertyScope  m_Scope;
     Int  m_MinDtapiMaj;             // Minimum DTAPI major version
     Int  m_MinDtapiMin;             // Minimum DTAPI minor version

@@ -114,10 +114,10 @@ void  DtEvtLogReport(DtEvtLog* pEvtObject, UInt32 ErrorCode, DtString* pInsert1,
     }
 
 #else
-
+    static const Int  MAX_MSG_LENGTH = 512;
     const char*  pMsg;
     const char*  pLevel;
-    char*  pMsgBuf;
+    char  MsgBuf[MAX_MSG_LENGTH];
     UInt  MsgBufLen;
 
     // First check if we have a GetEvtMessage function
@@ -133,22 +133,16 @@ void  DtEvtLogReport(DtEvtLog* pEvtObject, UInt32 ErrorCode, DtString* pInsert1,
         MsgBufLen += (pInsert2 != NULL ? strlen(pInsert2->m_Buffer) : 0);
         MsgBufLen += (pInsert3 != NULL ? strlen(pInsert3->m_Buffer) : 0);
         
-        // Allocate memory for message string
-        pMsgBuf = (char*)kmalloc(MsgBufLen, GFP_KERNEL);
-        
-        if (pMsgBuf != NULL)
+        if (MsgBufLen <= (MAX_MSG_LENGTH-1))
         {
             // Substitute inserts in msg string
-            sprintf(pMsgBuf, pMsg,
-                   (pInsert1 != NULL ? pInsert1->m_Buffer : NULL),
-                   (pInsert2 != NULL ? pInsert2->m_Buffer : NULL),
-                   (pInsert3 != NULL ? pInsert3->m_Buffer : NULL));
+            snprintf(MsgBuf, MAX_MSG_LENGTH, pMsg,
+                                          (pInsert1 != NULL ? pInsert1->m_Buffer : NULL),
+                                          (pInsert2 != NULL ? pInsert2->m_Buffer : NULL),
+                                          (pInsert3 != NULL ? pInsert3->m_Buffer : NULL));
                    
             // Use printk to write debug message
-            printk("%s" DRIVER_NAME ": %s\n", pLevel, pMsgBuf);
-        
-            // Free msg buffer
-            kfree(pMsgBuf);
+            printk("%s" DRIVER_NAME ": %s\n", pLevel, MsgBuf);
         }
     }
 #endif

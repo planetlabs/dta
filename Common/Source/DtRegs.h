@@ -396,13 +396,15 @@
 #define DT_TX_REG_DDS_DATA             0x0058
 #define DT_TX_REG_NCO_DATA_LOW         0x0058
 #define DT_TX_REG_NCO_DATA_HIGH        0x005C
-#define DT_TX_REG_TIMSYNC_CONTROL      0x005C
-#define DT_TX_REG_TIMSYNC_DATA         0x0060
+#define DT_TX_REG_TIMSYNC_CONTROL      0x0060
+#define DT_TX_REG_TIMSYNC_STATUS       0x0064
 #define DT_TX_REG_SRC_CONTROL1         0x0068
 #define DT_TX_REG_SRC_CONTROL2         0x006C
 #define DT_TX_REG_SRC_CONTROL3         0x0070
 #define DT_TX_REG_SRC_CONTROL4         0x0074
+#define DT_TX_REG_TIMSYNC_DIFF         0x0078
 #define DT_TX_REG_FIFO_LAST            0x007C
+
 //.-.-.-.-.-.-.-.-.-.-.-.-  Transmit-Control register: Bit fields -.-.-.-.-.-.-.-.-.-.-.-.
 #define DT_TXCTRL_TXMODE_MSK           0x00000003
 #define DT_TXCTRL_TXMODE_SH            0
@@ -673,6 +675,28 @@
 #define DT_TXNCOCTRL_CARRIER_ONLY_MSK  0x40000000
 #define DT_TXNCOCTRL_CARRIER_ONLY_SH   30
 
+//-.-.-.-.-.-.- Tx Modulation Synchronistation control register: Bit fields -.-.-.-.-.-.-.
+#define DT_TXTSYNCCTRL_SYNC_ENA_MSK    0x00000001
+#define DT_TXTSYNCCTRL_SYNC_ENA_SH     0
+#define DT_TXTSYNCCTRL_MAX_DIFF_MSK    0x00FFFFF0
+#define DT_TXTSYNCCTRL_MAX_DIFF_SH     4
+
+//.-.-.-.-.-.-.- Tx Modulation Synchronistation status register: Bit fields -.-.-.-.-.-.-.
+#define DT_TXTSYNCSTAT_INSYNC_MSK      0x00000001
+#define DT_TXTSYNCSTAT_INSYNC_SH       0
+#define DT_TXTSYNCSTAT_OVFLOW_MSK      0x00000002
+#define DT_TXTSYNCSTAT_OVFLOW_SH       1
+#define DT_TXTSYNCSTAT_TOOEARLY_MSK    0x000000F0
+#define DT_TXTSYNCSTAT_TOOEARLY_SH     4
+#define DT_TXTSYNCSTAT_TOOLATE_MSK     0x00000F00
+#define DT_TXTSYNCSTAT_TOOLATE_SH      8
+#define DT_TXTSYNCSTAT_OUTSYNC_MSK     0x00000F00
+#define DT_TXTSYNCSTAT_OUTSYNC_SH      12
+#define DT_TXTSYNCSTAT_ERRINV_MSK      0x0000F000
+#define DT_TXTSYNCSTAT_ERRINV_SH       16
+
+
+
 //+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ RF registers +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- RF Register offsets -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 //
@@ -847,6 +871,32 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_RFNLCCTRL2_NLCENA_SH         28
 
 
+
+//=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ GPS-clock register offsets +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=
+
+// Offsets relative to GPS-clock reference register base address
+#define DT_GPS_REG_CTRL                 0x0000
+#define DT_GPS_REG_STATUS               0x0004
+#define DT_GPS_REG_TIME_NS              0x0008
+#define DT_GPS_REG_TIME_SEC             0x000C
+
+//-.-.-.-.-.-.-.-.-.- GPS-clock register Control register: Bit Fields -.-.-.-.-.-.-.-.-.-.
+#define DT_GPS_CTRL_1PPSTOL_MSK          0x00000003
+#define DT_GPS_CTRL_1PPSTOL_SH           0
+
+// GPS-clock register Control register: 1PPS-tolerance
+#define DT_GPS_1PPSTOL_11NS             0x0
+#define DT_GPS_1PPSTOL_18NS             0x1
+#define DT_GPS_1PPSTOL_35NS             0x2
+#define DT_GPS_1PPSTOL_67NS             0x3
+
+//-.-.-.-.-.-.-.-.-.- GPS-clock register Control register: Bit Fields -.-.-.-.-.-.-.-.-.-.
+#define DT_GPS_STAT_1PPSSYNC_MSK         0x00000001
+#define DT_GPS_STAT_1PPSSYNC_SH          0
+#define DT_GPS_STAT_EXT10MHZ_MSK         0x00000002
+#define DT_GPS_STAT_EXT10MHZ_SH          1
+#define DT_GPS_STAT_1PPSERR_MSK          0x000000F0
+#define DT_GPS_STAT_1PPSERR_SH           4
 
 
 //+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ RX register offsets +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=

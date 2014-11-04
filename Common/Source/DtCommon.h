@@ -198,6 +198,7 @@ static const GUID  DT_CUSTOM_EVENT_GUID = { 0x578d909, 0x54fb, 0x47fa,
 #define DT_SH_CHANTYPE_UNDEFINED    0            // Undefined IP channel
 #define DT_SH_CHANTYPE_IPTX         1            // Transmit IP channel
 #define DT_SH_CHANTYPE_IPRX         2            // Receive IP channel
+#define DT_SH_CHANTYPE_IPRX_V2      3            // Receive IP channel: Dynamic RX buffers
 
 // Manufacturing plants
 #define MANUF_PLANT_DEKTEC          1            // Produced by DekTec
@@ -216,6 +217,7 @@ static const GUID  DT_CUSTOM_EVENT_GUID = { 0x578d909, 0x54fb, 0x47fa,
 #define PROG_ITF_SPI_EPCS1          0x0010       // SPI with EPCS1 device
 #define PROG_ITF_SPI_EPCS4          0x0020       // SPI with EPCS4 device
 #define PROG_ITF_SPI_EPCS16         0x0040       // SPI with EPCS16 device
+#define PROG_ITF_SPI_EPCS64         0x0080       // SPI with EPCS64 device
 #define PROG_ITF_CFI_FAST           0x0100       // CFI with EPCSx-like interface device
 
 #define ASI_SDI_DESER_ITF_NONE       0           // No ASI/SDI deserialiser used

@@ -83,6 +83,8 @@ static DtStatus  DtaIoConfigUpdateValidateGenLocked(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateGenRef(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
+static DtStatus  DtaIoConfigUpdateValidateGpsRef(DtaNonIpPort* pNonIpPort,
+                                         DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateFracMode(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigWriteToNonVolatileStorage(DtaNonIpPort*  pNonIpPort,
@@ -656,7 +658,12 @@ static DtStatus  DtaIoConfigUpdateValidate(
         Result = DtaIoConfigUpdateValidateGenRef(pNonIpPort, pPortUpdate, pUpdate);
         if (!DT_SUCCESS(Result))
             return Result;
-    
+        
+        // Validate DT_IOCONFIG_GPSREF
+        Result = DtaIoConfigUpdateValidateGpsRef(pNonIpPort, pPortUpdate, pUpdate);
+        if (!DT_SUCCESS(Result))
+            return Result;
+
         // Validate DT_IOCONFIG_FRACMODE
         Result = DtaIoConfigUpdateValidateFracMode(pNonIpPort, pPortUpdate, pUpdate);
         if (!DT_SUCCESS(Result))
@@ -1117,14 +1124,14 @@ static DtStatus  DtaIoConfigUpdateValidateRfClkSel(
     {
     case DT_IOCONFIG_NONE:
         // Not applicable should only be set when we do not support ext RF clock
-        DT_ASSERT(!pNonIpPort->m_CapRfClkInt && !pNonIpPort->m_CapRfClkExt);
-        break;
-    case DT_IOCONFIG_RFCLKINT:
-        if (!pNonIpPort->m_CapRfClkInt)
-            return DT_STATUS_CONFIG_ERROR;
+        DT_ASSERT(!pNonIpPort->m_CapRfClkExt && !pNonIpPort->m_CapRfClkInt);
         break;
     case DT_IOCONFIG_RFCLKEXT:
         if (!pNonIpPort->m_CapRfClkExt)
+            return DT_STATUS_CONFIG_ERROR;
+        break;
+    case DT_IOCONFIG_RFCLKINT:
+        if (!pNonIpPort->m_CapRfClkInt)
             return DT_STATUS_CONFIG_ERROR;
         break;
     default:
@@ -1538,6 +1545,42 @@ static DtStatus  DtaIoConfigUpdateValidateGenRef(
     return DT_STATUS_OK;
 }
 
+//-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateGpsRef -.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+static DtStatus  DtaIoConfigUpdateValidateGpsRef(
+    DtaNonIpPort* pNonIpPort, 
+    DtaIoConfigNonIpPortUpdate*  pPortUpdate,
+    DtaIoConfigUpdate* pUpdate)
+{
+    Int  i;
+    DtaNonIpPort*  pNonIpBuddyPort;
+    DtaDeviceData*  pDvcData = pNonIpPort->m_pDvcData;
+    
+    DtDbgOut(MAX, IOCONFIG, "Configuration GPSREF Value: %d SubValue: %d",
+                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_Value,
+                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_SubValue);
+
+    switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_Value)
+    {
+    case DT_IOCONFIG_NONE:
+        // Not applicable should only be set when we do not support GPSREF configuration
+        DT_ASSERT(!pNonIpPort->m_CapGpsRef);
+        break;
+    case DT_IOCONFIG_FALSE:
+        // Must support GPSREF configuration
+        if (!pNonIpPort->m_CapGpsRef || !pNonIpPort->m_CapRfClkInt)
+            return DT_STATUS_CONFIG_ERROR;
+        break;
+    case DT_IOCONFIG_TRUE:
+       // Must support GPSREF configuration
+         if (!pNonIpPort->m_CapGpsRef || !pNonIpPort->m_CapRfClkExt)
+            return DT_STATUS_CONFIG_ERROR;
+         break;
+    default:
+        return DT_STATUS_CONFIG_ERROR;
+    }    
+    return DT_STATUS_OK;
+}
 //.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateFracMode -.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
 static DtStatus  DtaIoConfigUpdateValidateFracMode(

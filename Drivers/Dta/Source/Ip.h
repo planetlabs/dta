@@ -294,8 +294,7 @@ typedef struct _DtaIpPortType2
     volatile UInt  m_RxRtSliceWriteIndex;
     DtEvent  m_RxRtSliceEvent;
     DtDpc  m_RxRtSliceEventSetDpc;
-    AddressMatcherLookupEntry  m_AddrMatchHead;
-                                                // Only for odd IpPort index
+    AddressMatcherLookupEntry  m_AddrMatchHead; // Only for odd IpPort index
     
     // Rt transmit
     IpHwChannel  m_TxRt;                        // DMA channel only for odd channel index
@@ -363,6 +362,7 @@ typedef struct _DtaIpDevice
                                            // reconstruction
     UserIpRxChannel*  m_pAddrMatchLUTable[DTA_MAX_ADDR_MATCHER_ENTRIES];
     UInt8  m_AddrMatchLUTableType[DTA_MAX_ADDR_MATCHER_ENTRIES];
+    UInt64  m_RefTimeStored;
 } DtaIpDevice;
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Public functions -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
@@ -385,6 +385,8 @@ DtStatus  DtaIpReleaseResourceFromFileObject(DtaDeviceData* pDvcData,
                                                                      DtFileObject* pFile);
 UInt64  DtaIpGetNumRxFifoOverflow(DtaIpPort* pIpPort);
 DtaShBuffer*  DtaIpGetSharedBuffer(DtaIpDevice* pIpDevice, Int ChannelIndex, 
+                                                                         Int ChannelType);
+DtStatus  DtaIpSharedBufferClosing(DtaIpDevice* pIpDevice, Int ChannelIndex, 
                                                                          Int ChannelType);
 DtStatus  DtaIpSharedBufferReady(DtaIpDevice* pIpDevice, Int ChannelIndex, 
                                                                          Int ChannelType);
