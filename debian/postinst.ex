@@ -20,7 +20,8 @@ set -e
 
 case "$1" in
     configure)
-      /etc/init.d/DtapiServiceInit restart || true
+      /etc/init.d/DtapiServiceInit stop || true
+      /etc/init.d/DtapiServiceInit start || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
