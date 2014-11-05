@@ -7,5 +7,16 @@ tail -n +$(awk '/^__START_OF_TARFILE__/ { print NR + 1; exit 0; }' ../DtapiServi
 
 mv -f DtapiService32 DtapiServiced
 rm -f DtapiService64
+rm -f DtInfoCL
+
+wget -q http://www.dektec.com/Products/Apps/DtInfoCL/Downloads/DtInfoCL.zip
+unzip DtInfoCL.zip DtInfoCL/Linux/DtInfoCL.tar.gz
+mkdir temp
+tar zfxv DtInfoCL/Linux/DtInfoCL.tar.gz -C temp
+rm -rf DtInfoCL*
+mv temp/DtInfoCL .
+rmdir temp
+
+ls -al 
 
 popd

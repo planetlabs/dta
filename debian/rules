@@ -18,5 +18,6 @@ override_dh_auto_install:
 	mkdir -p debian/tmp
 	cp binaries/DtapiServiced debian/tmp
 	cp binaries/DtapiServiceInit debian/tmp
+	cp binaries/DtInfoCL debian/tmp
 
 override_dh_shlibdeps:

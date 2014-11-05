@@ -1,2 +1,3 @@
 DtapiServiced usr/sbin
+DtInfoCL usr/bin
 DtapiServiceInit etc/init.d

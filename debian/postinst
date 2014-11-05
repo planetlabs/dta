@@ -21,6 +21,8 @@ set -e
 case "$1" in
     configure)
       /etc/init.d/DtapiServiceInit stop || true
+      /sbin/udevadm trigger || true
+      /sbin/modprobe Dta || true
       /etc/init.d/DtapiServiceInit start || true
     ;;
 

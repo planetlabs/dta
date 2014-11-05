@@ -19,6 +19,7 @@ set -e
 
 case "$1" in
     remove|upgrade|deconfigure)
+        /etc/init.d/DtapiServiceInit stop || true
     ;;
 
     failed-upgrade)
