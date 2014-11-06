@@ -20,10 +20,15 @@ set -e
 
 case "$1" in
     configure)
+      echo "Stopping DtapiService"
       /etc/init.d/DtapiServiceInit stop || true
-      /sbin/udevadm trigger || true
+      echo "Removing old Dta module"
+      sleep 5s
       /sbin/rmmod Dta || true
+      echo "Probing for Dta module"
       /sbin/modprobe Dta || true
+      /sbin/udevadm trigger || true
+      echo "Starting DtapiService"
       /etc/init.d/DtapiServiceInit start || true
     ;;
 
