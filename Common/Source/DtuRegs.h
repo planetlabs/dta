@@ -1,10 +1,11 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtuRegs.h *#*#*#*#*#*#*#*#*# (C) 2011-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtuRegs.h *#*#*#*#*#*#*#*#*# (C) 2011-2015 DekTec
 //
 // Dtu driver - Definition of register sets of DTU USB adapaters.
+//
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2011-2012 DekTec Digital Video B.V.
+// Copyright (C) 2011-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -12,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -53,19 +52,38 @@
 #define DTU215_IIC_PWR_1V8_CTRL        0x8F    // 1V8 power supply control data
 #define DTU215_IIC_PWR_3V3_CTRL        0x8F    // 3V3 power supply control data
 
+
+// DTU-3xx Firmware blocks offsets
+#define DTU3_FX3_BLOCK_OFFSET           ((1<<24) + 0x0000)
+#define DTU315_FIFO_BLOCK_OFFSET        0x200
+
+
 //=+=+=+=+=+=+=+=+=+=+=+=+=+ Declarations below are driver ONLY +=+=+=+=+=+=+=+=+=+=+=+=+=
 
 #ifdef USB_DRIVER
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Public interface -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+// USB2 adapters
 DtStatus  DtuRegRead(DtuDeviceData*  pDvcData, Int  RegAddr, UInt32*  pValue);
 DtStatus  DtuRegWrite(DtuDeviceData*  pDvcData, Int  RegAddr, UInt32  Value);
 DtStatus  DtuRegWriteMasked(DtuDeviceData*  pDvcData, Int  RegAddr, UInt32  Mask, 
                                                             UInt32  Shift, UInt32  Value);
-DtStatus  Dtu3RegRead(DtuDeviceData*  pDvcData, UInt16  Dvc, UInt16  RegAddr,
-                                                                         UInt16*  pValue);
-DtStatus  Dtu3RegWrite(DtuDeviceData*  pDvcData, UInt16  Dvc, UInt16  RegAddr,
-                                                                           UInt16  Value);
+DtStatus  Dtu3RegReadRaw(DtuDeviceData*  pDvcData, Int  RegAddr, UInt32*  pValue);
+DtStatus  Dtu3RegWriteRaw(DtuDeviceData*  pDvcData, Int  RegAddr, UInt32  Value);
+DtStatus  Dtu3RegWriteMaskedRaw(DtuDeviceData*  pDvcData, Int  RegAddr,
+                                              UInt32  Mask, UInt32  Shift, UInt32  Value);
+// DTU-351 specific functions
+DtStatus  Dtu35xRegRead(DtuDeviceData* pDvcData, UInt16 Dvc, UInt16 RegAddr,
+                                                                          UInt16* pValue);
+DtStatus  Dtu35xRegWrite(DtuDeviceData* pDvcData, UInt16 Dvc, UInt16 RegAddr,
+                                                                            UInt16 Value);
+
+// USB-3xxx specific functions for reading firmware block register.
+DtStatus  Dtu3RegRead(DtuDeviceData*  pDvcData, Int  BlockOffset, const DtFwField*,
+                                                                         UInt32*  pValue);
+DtStatus  Dtu3RegClear(DtuDeviceData*  pDvcData, Int  BlockOffset, const DtFwField*);
+DtStatus  Dtu3RegWrite(DtuDeviceData*  pDvcData, Int  BlockOffset, const DtFwField*,
+                                                                           UInt32  Value);
 #endif // #ifdef USB_DRIVER
 
 #endif // #ifndef __DTUREGS_H

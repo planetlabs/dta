@@ -1,11 +1,11 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* NonIpMatrix.c *#*#*#*#*#*#*#*#*#*#* (C) 2013 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* NonIpMatrix.c *#*#*#*#*#*#*#*# (C) 2013-2015 DekTec
 //
 // Dta driver - Non IP Matrix channel functionality - Implements matrix-API specific code
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2013 DekTec Digital Video B.V.
+// Copyright (C) 2013-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -31,12 +29,11 @@
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Internal functions -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 static void  DtaNonIpMatrixLastFrameIntDpc(DtDpcArgs* pArgs);
-static void  DtaNonIpMatrixRxFlagsIntDpc(DtDpcArgs* pArgs);
-static DtStatus  DtaNonIpMatrixConfigureForAsi(DtaNonIpPort* pNonIpPort,
-                                                                       Bool  ForceConfig);
+static DtStatus  DtaNonIpMatrixConfigureForAsi(DtaNonIpPort* pNonIpPort, Int ConfigMode);
 static DtStatus  DtaNonIpMatrixConfigureForSdi(DtaNonIpPort* pNonIpPort, 
-                                                    Int64  StartFrame, Bool  ForceConfig);
+                                                       Int64  StartFrame, Int ConfigMode);
 static DtStatus  DtaNonIpMatrixApplyConfig(DtaNonIpPort* pNonIpPort);
+static DtStatus  DtaNonIpMatrixSetVpidRegs(DtaNonIpPort* pNonIpPort);
 static DtStatus  DtaNonIpMatrixApplyBufferConfig(DtaNonIpPort* pNonIpPort);
 static DtStatus  DtaNonIpMatrixInitFrameProps(DtaNonIpPort* pNonIpPort);
 static DtStatus  DtaNonIpMatrixComputeBufferConfig(DtaNonIpPort* pNonIpPort);
@@ -46,8 +43,9 @@ static DtStatus  DtaNonIpMatrixInitFrameBufSectionConfig(DtaNonIpPort* pNonIpPor
 static Int  DtaNonIpMatrixNumSymbols2LineSizeInMem(DtaNonIpPort* pNonIpPort, 
                                                                          Int  NumSymbols);
 static Int  DtaNonIpMatrixGetDmaSize(DtaNonIpPort* pNonIpPort,
-                                              Int  LineNumS, Int  NumLines, 
-                                              Int DataFormat, Int  RgbMode, Int  Stride);
+                                                            Int  LineNumS, Int  NumLines,
+                                                            Int  DataFormat, Int  RgbMode,
+                                                            Int  AncFlt, Int  Stride);
 static DtStatus  DtaNonIpMatrixVidStd2SdiFormat(Int  VidStd, Int* pVideoId,
                                                      Int*  pPictRate, Int*  pProgressive);
 static DtStatus  DtaNonIpMatrixSdiFormat2VidStd(Int VideoId, Int  PictRate, 
@@ -66,6 +64,11 @@ static DtStatus  DtaLmh0387ReadRegister(DtaNonIpPort*  pNonIpPort,
 #ifdef _DEBUG
 static const char*  DtaNonIpMatrixState2Str(DtaMatrixPortState State);
 #endif
+
+// Configuration modes
+#define  DTA_MATRIX_CMODE_FULL        0         // Full re-configuration
+#define  DTA_MATRIX_CMODE_RESTART     1         // Re-start only (skip black-frame step)
+#define  DTA_MATRIX_CMODE_FORCE       0x8000    // OR with flags above to force re-config
 
 // Table used to convert between video standard and video format
 static const  Int  DTA_NONIP_MATRIX_VIDSTD_2_FORMAT[][4] =
@@ -111,25 +114,29 @@ static const  Int  DTA_NONIP_MATRIX_VIDSTD_2_FORMAT[][4] =
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
     { DT_VIDSTD_1080P30, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_30, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
+    { DT_VIDSTD_1080PSF23_98, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_23_98, 
+                                                           DT_HD_SDIFMT_PROGRESSIVE_PSF },
+    { DT_VIDSTD_1080PSF24, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_24, 
+                                                           DT_HD_SDIFMT_PROGRESSIVE_PSF },
+    { DT_VIDSTD_1080PSF25, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_25, 
+                                                           DT_HD_SDIFMT_PROGRESSIVE_PSF },
+    { DT_VIDSTD_1080PSF29_97, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_29_97, 
+                                                           DT_HD_SDIFMT_PROGRESSIVE_PSF },
+    { DT_VIDSTD_1080PSF30, DT_HD_SDIFMT_VIDEOID_HD1080, DT_HD_SDIFMT_PICTRATE_30, 
+                                                           DT_HD_SDIFMT_PROGRESSIVE_PSF },
     // 3G 1080 formats (LEVEL A)
-    { DT_VIDSTD_1080P50 | DT_VIDSTD_3GLVLA, 
-                                 DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_50, 
+    { DT_VIDSTD_1080P50, DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_50, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
-    { DT_VIDSTD_1080P59_94 | DT_VIDSTD_3GLVLA, 
-                              DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_59_94, 
+    { DT_VIDSTD_1080P59_94, DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_59_94, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
-    { DT_VIDSTD_1080P60 | DT_VIDSTD_3GLVLA, 
-                                 DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_60, 
+    { DT_VIDSTD_1080P60, DT_HD_SDIFMT_VIDEOID_3GLVLA, DT_HD_SDIFMT_PICTRATE_60, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
     // 3G 1080 formats (LEVEL B)
-    { DT_VIDSTD_1080P50 | DT_VIDSTD_3GLVLB, 
-                                 DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_50, 
+    { DT_VIDSTD_1080P50B, DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_50, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
-    { DT_VIDSTD_1080P59_94 | DT_VIDSTD_3GLVLB, 
-                              DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_59_94, 
+    { DT_VIDSTD_1080P59_94B, DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_59_94, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
-    { DT_VIDSTD_1080P60 | DT_VIDSTD_3GLVLB, 
-                                 DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_60, 
+    { DT_VIDSTD_1080P60B, DT_HD_SDIFMT_VIDEOID_3GLVLB, DT_HD_SDIFMT_PICTRATE_60, 
                                                             DT_HD_SDIFMT_PROGRESSIVE_ON },
 };
 static const  Int  DTA_NONIP_MATRIX_VIDSTD_2_FORMAT_NUM_ENTRIES = 
@@ -153,17 +160,22 @@ static const  UInt  DTA_NONIP_MATRIX_VIDSTD_2_SMPTE_VIDID[][2] =
     {DT_VIDSTD_1080P25,                         0x85C50001 },
     {DT_VIDSTD_1080P29_97,                      0x85C60001 },
     {DT_VIDSTD_1080P30,                         0x85C70001 },
+    {DT_VIDSTD_1080PSF23_98,                    0x85420001 },
+    {DT_VIDSTD_1080PSF24,                       0x85430001 },
+    {DT_VIDSTD_1080PSF25,                       0x85450001 },
+    {DT_VIDSTD_1080PSF29_97,                    0x85460001 },
+    {DT_VIDSTD_1080PSF30,                       0x85470001 },
     {DT_VIDSTD_1080I50,                         0x85050001 },
     {DT_VIDSTD_1080I59_94,                      0x85060001 },
     {DT_VIDSTD_1080I60,                         0x85070001 },
     // 3G-SDI level A
-    {DT_VIDSTD_1080P50 | DT_VIDSTD_3GLVLA,      0x89C90001 },
-    {DT_VIDSTD_1080P59_94 | DT_VIDSTD_3GLVLA,   0x89CA0001 },
-    {DT_VIDSTD_1080P60 | DT_VIDSTD_3GLVLA,      0x89CB0001 },
+    {DT_VIDSTD_1080P50,                         0x89C90001 },
+    {DT_VIDSTD_1080P59_94,                      0x89CA0001 },
+    {DT_VIDSTD_1080P60,                         0x89CB0001 },
     // 3G-SDI level B
-    {DT_VIDSTD_1080P50 | DT_VIDSTD_3GLVLB,      0x8AC90001 },
-    {DT_VIDSTD_1080P59_94 | DT_VIDSTD_3GLVLB,   0x8ACA0001 },
-    {DT_VIDSTD_1080P60 | DT_VIDSTD_3GLVLB,      0x8ACB0001 }
+    {DT_VIDSTD_1080P50B,                        0x8A490001 },
+    {DT_VIDSTD_1080P59_94B,                     0x8A4A0001 },
+    {DT_VIDSTD_1080P60B,                        0x8A4B0001 }
     
 };
 static const  Int  DTA_NONIP_MATRIX_VIDSTD_2_SMPTE_VIDID_LEN =
@@ -295,7 +307,7 @@ DtStatus  DtaNonIpMatrixClose(DtaNonIpPort* pNonIpPort, DtFileObject* pFile)
     DtStatus  HasAccess;
     DT_ASSERT(pNonIpPort!=NULL && pNonIpPort->m_CapMatrix);
 
-    DtFastMutexAcquire(&pNonIpPort->m_pDvcData->m_ExclAccessMutex);
+    DtaDeviceAcquireExclAccess(pNonIpPort->m_pDvcData);
     HasAccess = DtaNonIpHasAccess(pNonIpPort, pFile);
     DtFastMutexRelease(&pNonIpPort->m_pDvcData->m_ExclAccessMutex);
 
@@ -311,13 +323,12 @@ DtStatus  DtaNonIpMatrixClose(DtaNonIpPort* pNonIpPort, DtFileObject* pFile)
                 DtaNonIpMatrixSetAsiCtrl(pNonIpPort, DT_TXCTRL_IDLE);
             DtMutexRelease(&pNonIpPort->m_Matrix.m_StateLock);
         } else {
-            // Reset the state to HOLD when running
-            if (pNonIpPort->m_Matrix.m_State == MATRIX_PORT_RUN)
-                DtaNonIpMatrixSetState(pNonIpPort, MATRIX_PORT_HOLD);
             DtMutexRelease(&pNonIpPort->m_Matrix.m_StateLock);
-            // m_Matrix.m_StateLock must not be held when calling AttachToRow, since it'll
-            // call configure which takes that lock (and recursive locking is not
-            // supported under linux).
+
+            // m_Matrix.m_StateLock must not be held when calling AttachToRow and 
+            // DtaNonIpMatrixStop, since it'll call configure which takes that lock 
+            // (and recursive locking is not supported under linux).
+            DtaNonIpMatrixStop(pNonIpPort); // Stop channel
             DtaNonIpMatrixAttachToRow(pNonIpPort, pNonIpPort->m_PortIndex);
         }
     }
@@ -330,7 +341,7 @@ DtStatus  DtaNonIpMatrixClose(DtaNonIpPort* pNonIpPort, DtFileObject* pFile)
 DtStatus  DtaNonIpMatrixConfigure(DtaNonIpPort* pNonIpPort, Bool  ForceConfig)
 {
     DtStatus  Status = DT_STATUS_OK;
-    Int  IoStdValue = pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value;
+    Int  ConfigMode=0, IoStdValue=pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value;
     Bool  IsInput=FALSE, IsOutput=FALSE, IsDblBuf=FALSE;
 
     DT_ASSERT(pNonIpPort->m_CapMatrix);
@@ -353,37 +364,44 @@ DtStatus  DtaNonIpMatrixConfigure(DtaNonIpPort* pNonIpPort, Bool  ForceConfig)
     // Set double buffered configuration (if channel supports double-buffering)
     if (pNonIpPort->m_CapDblBuf)
     {
-        if (IsInput || IsOutput)
-            DtaRegHdCtrl1SetDblBuf(pNonIpPort->m_pRxRegs, DT_HD_DBLBUF_NONE);
-        else if (IsDblBuf)
+        Int  Buddy = DT_HD_DBLBUF_NONE;
+        if (IsDblBuf)
         {
-            Int  BuddyPort = DT_HD_DBLBUF_NONE;
-            switch (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_ParXtra[0])
-            {
-            case 0:  BuddyPort = DT_HD_DBLBUF_PORT1; break;
-            case 1:  BuddyPort = DT_HD_DBLBUF_PORT2; break;
-            case 2:  BuddyPort = DT_HD_DBLBUF_PORT3; break;
-            case 3:  BuddyPort = DT_HD_DBLBUF_PORT4; break;
-            case 4:  BuddyPort = DT_HD_DBLBUF_PORT5; break;
-            case 5:  BuddyPort = DT_HD_DBLBUF_PORT6; break;
-            case 6:  BuddyPort = DT_HD_DBLBUF_PORT7; break;
-            default: DT_ASSERT(1==0); break;
-            }
-            DtaRegHdCtrl1SetDblBuf(pNonIpPort->m_pRxRegs, BuddyPort);
+            Status = DtaGetPortNumber(pNonIpPort->m_pDvcData,
+                        (Int)pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_ParXtra[0], &Buddy);
+            DT_ASSERT(DT_SUCCESS(Status));
+            if (!DT_SUCCESS(Status))
+                Buddy = DT_HD_DBLBUF_NONE;
         }
+        DtaRegHdCtrl1SetDblBuf(pNonIpPort->m_pRxRegs, Buddy);
     }
     
     //-.-.-.-.-.-.-.-.-.- ASI / (SD/HD/3G)-SDI specific configuration -.-.-.-.-.-.-.-.-.-.
 
-    
+    ConfigMode = DTA_MATRIX_CMODE_FULL | (ForceConfig ? DTA_MATRIX_CMODE_FORCE : 0);
     if (IoStdValue == DT_IOCONFIG_ASI)
-        Status = DtaNonIpMatrixConfigureForAsi(pNonIpPort, ForceConfig);
+    {
+        Status = DtaNonIpMatrixConfigureForAsi(pNonIpPort, ConfigMode);
+        // DTA-2152 FW2, DTA-2154 FW5 and DTA-2174 FW2 have a firmware bug:
+        // double-buffering for ASI depends on the TxCtrl register. We set it to SEND 
+        // immediately. In this mode applications cannot attach to the port and change it.
+        if (DT_SUCCESS(Status) && IsDblBuf &&
+                               ((pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber==2152 &&
+                                pNonIpPort->m_pDvcData->m_DevInfo.m_FirmwareVersion==2) ||
+                               (pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber==2154 &&
+                                pNonIpPort->m_pDvcData->m_DevInfo.m_FirmwareVersion==5) ||
+                               (pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber==2174 &&
+                                pNonIpPort->m_pDvcData->m_DevInfo.m_FirmwareVersion==2)))
+        {
+            DtaRegHdCtrl1SetRxTxCtrl(pNonIpPort->m_pTxRegs, 3);
+        }
+    }
     else if (IoStdValue == DT_IOCONFIG_SDI || IoStdValue == DT_IOCONFIG_HDSDI
                                                        || IoStdValue == DT_IOCONFIG_3GSDI)
     {
         DtMutexAcquire(&pNonIpPort->m_Matrix.m_StateLock, -1);
         Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, DTA_FRMBUF_HOLD_FRAME, 
-                                                                             ForceConfig);
+                                                                              ConfigMode);
         DtMutexRelease(&pNonIpPort->m_Matrix.m_StateLock);
     }
     else
@@ -410,7 +428,7 @@ DtStatus  DtaNonIpMatrixDetectVidStd(DtaNonIpPort* pNonIpPort, Int*  pVidStd)
     *pVidStd = DT_VIDSTD_UNKNOWN;
 
     // Must be matrix capable
-    if (!pNonIpPort->m_CapMatrix)
+    if (!pNonIpPort->m_CapMatrix && !pNonIpPort->m_CapMatrix2)
     {
         DtDbgOut(ERR, NONIP, "Port %d is not matrix capable", pNonIpPort->m_PortIndex+1);
         return DT_STATUS_NOT_SUPPORTED;
@@ -432,8 +450,9 @@ DtStatus  DtaNonIpMatrixDetectVidStd(DtaNonIpPort* pNonIpPort, Int*  pVidStd)
         if (!DT_SUCCESS(Status))
             return Status;
     }
-    else if (pNonIpPort->m_AsiSdiDeserItfType==ASI_SDI_DESER_ITF_FPGA_BASED || 
-                         pNonIpPort->m_AsiSdiDeserItfType==ASI_SDI_DESER_ITF_FPGA_LMH0387)
+    else if (pNonIpPort->m_AsiSdiDeserItfType==ASI_SDI_DESER_ITF_FPGA_BASED
+                       || pNonIpPort->m_AsiSdiDeserItfType==ASI_SDI_DESER_ITF_FPGA_LMH0387
+                       || pNonIpPort->m_AsiSdiDeserItfType==ASI_SDI_DESER_ITF_FPGA_GS3490)
     {
         // FPGA based => get the video standard from SDI status register
         Int  VideoId = DtaRegHdSdiStatusGetVideoId(pHdRegs);
@@ -443,20 +462,23 @@ DtStatus  DtaNonIpMatrixDetectVidStd(DtaNonIpPort* pNonIpPort, Int*  pVidStd)
         // Convert SMPTE video standard to our video standard
         DtaNonIpMatrixSdiFormat2VidStd(VideoId, PictRate, Progressive, pVidStd);
 
-        if (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_SDI)
+        if (pNonIpPort->m_CapMatrix2)
         {
-            // If the port is configured as SD input, the detection of HD standards
-            // is not working properly. If this is the case, toggle to an HD standard
-            // to allow proper detection.
-            if (*pVidStd!=DT_VIDSTD_525I59_94 && *pVidStd!=DT_VIDSTD_625I50)
-                *pVidStd = DT_VIDSTD_UNKNOWN;
+            UInt32  Vpid = DtaRegHdSdiFormat1Get(pHdRegs);
+            if (*pVidStd==DT_VIDSTD_1080I50 && ((Vpid&0x0000CFFF) == 0x00004585))
+                *pVidStd = DT_VIDSTD_1080PSF25;
+            else if (*pVidStd==DT_VIDSTD_1080I59_94 && ((Vpid&0x0000CFFF) == 0x00004685))
+                *pVidStd = DT_VIDSTD_1080PSF29_97;
+            else if (*pVidStd==DT_VIDSTD_1080I60 && ((Vpid&0x0000CFFF) == 0x00004785))
+                *pVidStd = DT_VIDSTD_1080PSF30;
         }
         
-        // HW can not detect fractional formats while set to non-fractional mode and vice
-        // versa, so toggle between the two and check again. NOTE: only  if the channel 
-        // is not in started and we have a carrier (no carrier => no use to look for a
-        // a signal)
-        if (*pVidStd==DT_VIDSTD_UNKNOWN && DtaRegHdStatGetCarrierDetect(pHdRegs)!=0)
+        // HW, WITHOUT THE MATRIX2 CAP, cannot detect fractional formats while 
+        // set to non-fractional mode and vice versa, so toggle between the two and 
+        // check again. NOTE: only  if the channel is not in started and we have a 
+        // carrier (no carrier => no use to look for a signal)
+        if (!pNonIpPort->m_CapMatrix2 && *pVidStd==DT_VIDSTD_UNKNOWN 
+                                              && DtaRegHdStatGetCarrierDetect(pHdRegs)!=0)
         {
             Int  i, l, NumVidStdToggle = 0;
             Int  VidStdToggle[2] = {DT_VIDSTD_UNKNOWN, DT_VIDSTD_UNKNOWN};
@@ -515,10 +537,10 @@ DtStatus  DtaNonIpMatrixDetectVidStd(DtaNonIpPort* pNonIpPort, Int*  pVidStd)
             {
                 DtaNonIpMatrixVidStd2SdiFormat(VidStdToggle[i], &VideoId, &PictRate, 
                                                                             &Progressive);
-
-                DtaRegHdSdiFormatSetVideoId(pHdRegs, VideoId);
-                DtaRegHdSdiFormatSetPictureRate(pHdRegs, PictRate);
-                DtaRegHdSdiFormatSetProgressive(pHdRegs, Progressive);
+                
+                DtaRegHdSdiFormat1SetVideoId(pHdRegs, VideoId);
+                DtaRegHdSdiFormat1SetPictureRate(pHdRegs, PictRate);
+                DtaRegHdSdiFormat1SetProgressive(pHdRegs, Progressive);
 
                 DtDbgOut(AVG, NONIP, "Toggling SDI format to: id=%d, r=%d, p=%d", VideoId,
                                                                    PictRate, Progressive);
@@ -555,9 +577,9 @@ DtStatus  DtaNonIpMatrixDetectVidStd(DtaNonIpPort* pNonIpPort, Int*  pVidStd)
             DtaNonIpMatrixVidStd2SdiFormat(pMatrix->m_FrameProps.m_VidStd, 
                                                        &VideoId, &PictRate, &Progressive);
             
-            DtaRegHdSdiFormatSetVideoId(pHdRegs, VideoId);
-            DtaRegHdSdiFormatSetPictureRate(pHdRegs, PictRate);
-            DtaRegHdSdiFormatSetProgressive(pHdRegs, Progressive);
+            DtaRegHdSdiFormat1SetVideoId(pHdRegs, VideoId);
+            DtaRegHdSdiFormat1SetPictureRate(pHdRegs, PictRate);
+            DtaRegHdSdiFormat1SetProgressive(pHdRegs, Progressive);
 
             DtDbgOut(MAX, NONIP, "Restore SDI format to: id=%d, r=%d, p=%d", VideoId, 
                                                                    PictRate, Progressive);
@@ -597,10 +619,9 @@ DtStatus  DtaNonIpMatrixInit(DtaNonIpPort* pNonIpPort)
     Status = DtEventInit(&pMatrix->m_LastFrameIntEvent, FALSE);
     if (!DT_SUCCESS(Status))
         return Status;
-
-    Status = DtDpcInit(&pMatrix->m_RxErrIntDpc, DtaNonIpMatrixRxFlagsIntDpc, TRUE);
-    if (!DT_SUCCESS(Status))
-        return Status;
+    
+    pMatrix->m_FrmIntCnt = 0;
+    pMatrix->m_ForceRestart = 0;
         
     pMatrix->m_LastFrame = 0;
     pMatrix->m_SofFrame = 0;
@@ -615,6 +636,8 @@ DtStatus  DtaNonIpMatrixInit(DtaNonIpPort* pNonIpPort)
     pMatrix->m_LastStateAtInt = MATRIX_PORT_UNINIT;  
 
     pMatrix->m_AsiFifoSize = 16 * 1024 * 1024;
+
+    pMatrix->m_ExtraPixelDelay = 0; // By default, no extra delay
 
     // Set to unknown video standard
     pFrameProps->m_VidStd = DT_VIDSTD_UNKNOWN;  
@@ -655,13 +678,6 @@ DtStatus  DtaNonIpMatrixInterruptEnable(DtaNonIpPort* pNonIpPort)
 
     // Last-frame interrupt (enable if port is configued for SDI
     DtaRegHdCtrl1SetLastFrameIntEn(pNonIpPort->m_pRxRegs, IsSdi ? 1 : 0);
-
-    // For ports that support ASI also enable the RX sync and RX ovf interrupts
-    if (pNonIpPort->m_CapAsi)
-    {
-        DtaRegHdCtrl1SetRxSyncErrIntEn(pNonIpPort->m_pRxRegs, IsAsi ? 1 : 0);
-        DtaRegHdCtrl1SetRxOvfErrIntEn(pNonIpPort->m_pRxRegs, IsAsi ? 1 : 0);
-    }
     return Status;
 }
 
@@ -755,7 +771,9 @@ DtStatus  DtaNonIpMatrixSetAsiCtrl(DtaNonIpPort* pNonIpPort, Int  AsiCtrl)
     } else { // Output
         switch (AsiCtrl)
         {
-        case DT_TXCTRL_IDLE: RxTxMode = 0; break;
+        // Workaround for TT#2152, TT#2153: no K28.5 symbols in IDLE. Set port to hold
+        // instead of idle. No practical difference.
+        case DT_TXCTRL_IDLE: RxTxMode = 1; break;
         case DT_TXCTRL_HOLD: RxTxMode = 1; break;
         case DT_TXCTRL_SEND: RxTxMode = 3; break;
         default: return DT_STATUS_INVALID_PARAMETER;
@@ -788,7 +806,6 @@ DtStatus  DtaNonIpMatrixSetAsiCtrl(DtaNonIpPort* pNonIpPort, Int  AsiCtrl)
         // Reset flags but not the latched flags
         DtSpinLockAcquire(&pNonIpPort->m_FlagsSpinLock);
         pNonIpPort->m_Flags = 0;
-        pNonIpPort->m_TxUfl = FALSE;
         DtSpinLockRelease(&pNonIpPort->m_FlagsSpinLock);
     }
 
@@ -823,15 +840,38 @@ DtStatus  DtaNonIpMatrixSetState(DtaNonIpPort* pNonIpPort, DtaMatrixPortState  N
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixStart -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 //
-DtStatus  DtaNonIpMatrixStart(DtaNonIpPort* pNonIpPort, Int64  StartFrame)
+DtStatus  DtaNonIpMatrixStart(
+    DtaNonIpPort*  pNonIpPort,
+    Int64  StartFrame,
+    Bool  AutoMode,
+    Bool  ForceRestart)
 {
     DtStatus  Status = DT_STATUS_OK;
     DtaMatrixPort*  pMatrix = NULL;
+    DtaDeviceData*  pDvcData = NULL;
+    Int  ConfigMode = 0;
+    Bool  NeedReConfig=FALSE, IsOutput=FALSE, IsGenlocked=FALSE;
 
     DT_ASSERT(pNonIpPort != NULL);
     DT_ASSERT(pNonIpPort->m_CapMatrix);
 
+    pDvcData = pNonIpPort->m_pDvcData;
+    DT_ASSERT(pDvcData != NULL);
     pMatrix = &pNonIpPort->m_Matrix;
+    DT_ASSERT(pMatrix != NULL);
+
+    // Is this port an output?
+    IsOutput = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_OUTPUT);
+    // Trying to genlock to active genlock reference?
+    if (pNonIpPort->m_CapGenLocked)
+    {
+        IsGenlocked =
+                 (pNonIpPort->m_IoCfg[DT_IOCONFIG_GENLOCKED].m_Value == DT_IOCONFIG_TRUE);
+    }
+
+    // Manual frame index control is not supported on legacy interface
+    if (DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort) && !AutoMode)
+        return DT_STATUS_NOT_SUPPORTED;
     
     DtMutexAcquire(&pMatrix->m_StateLock, -1);
         
@@ -842,24 +882,59 @@ DtStatus  DtaNonIpMatrixStart(DtaNonIpPort* pNonIpPort, Int64  StartFrame)
         return DT_STATUS_FAIL;
     }
 
-    // For legacy HD channel interface, we need to re-configure and (re-)start the channel
+    //.-.-.-.-.-.-.-.-.- Check if we need to re-config/re-start channel -.-.-.-.-.-.-.-.-.
+    //
+    // There are two reasons namely:
+    // 1: For a legacy HD channel interface, we need to re-configure and (re-)start 
+    //    the channel by definition
+    // 2: A genlockable output needs to be re-started when a genlock reference is used 
+    //    to make sure the output aligns/locks to the reference
+    //
+    //    NOTE: MIGHT WANT TO ACTUALLY USE THE DTAPI_IOCONFIG_GENLOCKED STATE HERE???
+
     if (DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort))
     {
-        Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, StartFrame, TRUE);
+        DtDbgOut(MIN, NONIP, "Legacy HD-channel => force re-config of channel");
+        NeedReConfig = TRUE;
+        ConfigMode = DTA_MATRIX_CMODE_FULL;
+    }
+    else if (IsOutput && IsGenlocked)
+    {
+        DtDbgOut(MIN, NONIP, "Genlockable output => force a re-start of channel");
+        NeedReConfig = TRUE;
+        ConfigMode = DTA_MATRIX_CMODE_RESTART;
+    }
+    else if (ForceRestart)
+    {
+        DtDbgOut(MIN, NONIP, "API requested restart => force a re-start of channel");
+        NeedReConfig = TRUE;
+        ConfigMode = DTA_MATRIX_CMODE_RESTART;
+    }
+    else
+        NeedReConfig = FALSE;
+
+    if (NeedReConfig)
+    {
+        ConfigMode |= DTA_MATRIX_CMODE_FORCE;   // Force the reconfig/restart
+        Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, StartFrame, ConfigMode);
         if (!DT_SUCCESS(Status))
         {
             DtMutexRelease(&pMatrix->m_StateLock);
             return Status;
         }
     }
-    else
-    {
-        // Set start frame as forced next frame
-        pMatrix->m_NextFrame = StartFrame;
-    }
+    
+    DtaNonIpMatrixSetVpidRegs(pNonIpPort);
 
+    // NOTE: A legacy channel is re-configured (see above) and next-frame is set there
+    if (!DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort))
+        pMatrix->m_NextFrame = StartFrame;  // Set start frame as forced next frame
+    
     // Move to new state
-    DtaNonIpMatrixSetState(pNonIpPort, MATRIX_PORT_RUN);
+    DtaNonIpMatrixSetState(pNonIpPort, AutoMode ? MATRIX_PORT_RUN_AUTO :
+                                                                     MATRIX_PORT_RUN_MAN);
+    // Make sure the interrupt routine knows a start was executed
+    DtAtomicSet(&pNonIpPort->m_Matrix.m_ForceRestart, 1);
     
     DtMutexRelease(&pMatrix->m_StateLock);
 
@@ -872,15 +947,27 @@ DtStatus  DtaNonIpMatrixStop(DtaNonIpPort* pNonIpPort)
 {
     DtStatus  Status = DT_STATUS_OK;
     Bool  IsSdi=FALSE;
+    Int  ConfigMode = 0;
     DtaMatrixPort*  pMatrix = NULL;
 
     DT_ASSERT(pNonIpPort != NULL);
     DT_ASSERT(pNonIpPort->m_CapMatrix);
 
     pMatrix = &pNonIpPort->m_Matrix;
+    
+    pMatrix->m_Vpid1 = 0;
+    pMatrix->m_Vpid2 = 0;
 
     DtMutexAcquire(&pMatrix->m_StateLock, -1);
 
+    // Are we running?
+    if (pNonIpPort->m_Matrix.m_State == MATRIX_PORT_HOLD)
+    {
+        // Already in HOLD => nothing TODO
+        DtMutexRelease(&pMatrix->m_StateLock);
+        return DT_STATUS_OK;
+    }
+    
     IsSdi = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_SDI)
                  || (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_HDSDI)
                  || (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_3GSDI);
@@ -890,7 +977,9 @@ DtStatus  DtaNonIpMatrixStop(DtaNonIpPort* pNonIpPort)
     {
         // Set the black frame as 'start-frame'; this will result in the channel to
         // start in FREEZE mode
-        Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, DTA_FRMBUF_HOLD_FRAME, TRUE);
+        ConfigMode = DTA_MATRIX_CMODE_FULL | DTA_MATRIX_CMODE_FORCE;
+        Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, DTA_FRMBUF_HOLD_FRAME, 
+                                                                              ConfigMode);
         if (!DT_SUCCESS(Status))
         {
             DtMutexRelease(&pMatrix->m_StateLock);
@@ -922,6 +1011,31 @@ DtStatus  DtaNonIpMatrixGetCurrentFrame(DtaNonIpPort* pNonIpPort, Int64*  pFrame
         *pFrame = pNonIpPort->m_Matrix.m_CurFrame;
     return Status;
 }
+
+//.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixSetNextFrame -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+DtStatus  DtaNonIpMatrixSetNextFrame(DtaNonIpPort* pNonIpPort, Int64  NextFrame)
+{
+    Int  NextFrmIdx;
+    DtaFrameBufSectionConfig*  pSections;
+    DT_ASSERT(pNonIpPort != NULL);
+    DT_ASSERT(pNonIpPort->m_CapMatrix);
+
+    pSections = pNonIpPort->m_Matrix.m_BufConfig.m_Sections;
+
+    pNonIpPort->m_Matrix.m_NextFrame = NextFrame;
+    // Set address for the next frame to be transmited/received
+    NextFrmIdx = DtaNonIpMatrixFrame2Index(pNonIpPort, NextFrame);
+
+    DT_ASSERT(pSections[0].m_FrameStartAddr[NextFrmIdx] != -1);
+    DtaRegHdS0NextFrmAddrSet(pNonIpPort->m_pRxRegs, 
+                                        pSections[0].m_FrameStartAddr[NextFrmIdx]);
+    DT_ASSERT(pSections[1].m_FrameStartAddr[NextFrmIdx] != -1);
+    DtaRegHdS1NextFrmAddrSet(pNonIpPort->m_pRxRegs, 
+                                        pSections[1].m_FrameStartAddr[NextFrmIdx]);
+    return DT_STATUS_OK;
+}
+
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixFrame2Index -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
@@ -1368,6 +1482,10 @@ DtStatus  DtaNonIpMatrixGetReqDmaSize(
             LineNumS += 1;
         LineNumS /= 2;
     }
+
+    // Add 8 symbols for SAV per line iv VANC filter mode is enabled.
+    if (pMemTrSetup->m_AncFlt == DT_MEMTR_ANCFLTMODE_VANCALL)
+        LineNumS += 8;
     
     // Check: stride mode
     if (pMemTrSetup->m_Stride > 0)
@@ -1410,6 +1528,7 @@ DtStatus  DtaNonIpMatrixGetReqDmaSize(
     *pReqDmaSize = DtaNonIpMatrixGetDmaSize(pNonIpPort, LineNumS, NumLines,
                                                                 pMemTrSetup->m_DataFormat,
                                                                 pMemTrSetup->m_RgbMode,
+                                                                pMemTrSetup->m_AncFlt,
                                                                 pMemTrSetup->m_Stride);
 
     return DT_STATUS_OK;
@@ -1432,59 +1551,11 @@ void  DtaNonIpMatrixLastFrameIntDpc(DtDpcArgs* pArgs)
     DtEventSet(&pNonIpPort->m_Matrix.m_LastFrameIntEvent);
 }
 
-//-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixProcessRxFlags -.-.-.-.-.-.-.-.-.-.-.-.-.-.-
-//
-// PRE: pNonIpPort->m_FlagsSpinLock has been acquired
-static void  DtaNonIpMatrixProcessRxFlags(DtaNonIpPort* pNonIpPort)
-{
-    Int  Status = 0;
-    
-    if (DtaRegHdStatGetRxSyncErrInt(pNonIpPort->m_pRxRegs) != 0)
-    {
-        Status |= DTA_RX_SYNC_ERR;
-        DtaRegHdStatClrRxSyncErrInt(pNonIpPort->m_pRxRegs);
-    }
-    if (DtaRegHdStatGetRxOvfErrInt(pNonIpPort->m_pRxRegs) != 0)
-    {
-        // This interrupt works both as RX overflow and as TX underflow depending on
-        // the current configuration.
-        if (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_INPUT)
-            Status |= DTA_RX_FIFO_OVF;
-        else {
-            Status |= DTA_TX_FIFO_UFL;
-            pNonIpPort->m_TxUfl = TRUE;
-        }
-        DtaRegHdStatClrRxOvfErrInt(pNonIpPort->m_pRxRegs);
-    }
-
-    pNonIpPort->m_FlagsLatched |= Status;
-    pNonIpPort->m_Flags = Status;
-}
-
-//-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixProcessRxFlagsFromUser -.-.-.-.-.-.-.-.-.-.-.-.-
-//
-void  DtaNonIpMatrixProcessRxFlagsFromUser(DtaNonIpPort* pNonIpPort)
-{
-    DtSpinLockAcquire(&pNonIpPort->m_FlagsSpinLock);
-    DtaNonIpMatrixProcessRxFlags(pNonIpPort);
-    DtSpinLockRelease(&pNonIpPort->m_FlagsSpinLock);
-}
-
-//-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixRxFlagsIntDpc -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
-//
-void  DtaNonIpMatrixRxFlagsIntDpc(DtDpcArgs* pArgs)
-{
-    DtaNonIpPort*  pNonIpPort = (DtaNonIpPort*)pArgs->m_pContext;
-    DtSpinLockAcquire(&pNonIpPort->m_FlagsSpinLock);
-    DtaNonIpMatrixProcessRxFlags(pNonIpPort);
-    DtSpinLockRelease(&pNonIpPort->m_FlagsSpinLock);
-}
-
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixConfigureForAsi -.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
 static DtStatus  DtaNonIpMatrixConfigureForAsi(
     DtaNonIpPort* pNonIpPort, 
-    Bool  ForceConfig)
+    Int  ConfigMode)
 {
     DtStatus  Status = DT_STATUS_OK;
     volatile UInt8*  pHdRegs;
@@ -1528,9 +1599,9 @@ static DtStatus  DtaNonIpMatrixConfigureForAsi(
 
         DtaNonIpMatrixVidStd2SdiFormat(DT_VIDSTD_1080I50, &VideoId, &PictRate,
                                                                             &Progressive);
-        DtaRegHdSdiFormatSetVideoId(pHdRegs, VideoId);
-        DtaRegHdSdiFormatSetPictureRate(pHdRegs, PictRate);
-        DtaRegHdSdiFormatSetProgressive(pHdRegs, Progressive);
+        DtaRegHdSdiFormat1SetVideoId(pHdRegs, VideoId);
+        DtaRegHdSdiFormat1SetPictureRate(pHdRegs, PictRate);
+        DtaRegHdSdiFormat1SetProgressive(pHdRegs, Progressive);
 
         DtaRegHdCtrl1SetOpMode(pHdRegs, DT_HD_OPMODE_HD);
     }
@@ -1602,7 +1673,7 @@ static DtStatus  DtaNonIpMatrixConfigureForAsi(
         // Check for GS2961 deserialiser
         if (pNonIpPort->m_AsiSdiDeserItfType == ASI_SDI_DESER_ITF_GS2961)
         {
-            Status = DtaGs2961Enable(pNonIpPort, TRUE/*ASI MODE*/);
+            Status = DtaGs2961Enable(pNonIpPort, TRUE/*ASI MODE*/, FALSE);
             if (!DT_SUCCESS(Status))
             {
                 DtDbgOut(ERR, NONIP, "Failed to enabled GS2961 for ASI");
@@ -1640,6 +1711,15 @@ static DtStatus  DtaNonIpMatrixConfigureForAsi(
     pNonIpPort->m_Matrix.m_AsiDmaOffset = 0;
     pNonIpPort->m_Matrix.m_AsiCtrl = DT_TXCTRL_IDLE; // Is the same as DT_RXCTRL_IDLE
     DtaRegHdAsiByteCountSet(pHdRegs, 0);
+    DtaRegHdSetMemTrNumBAsi(pHdRegs, 0);
+    DtaRegHdS0NextFrmAddrSet(pHdRegs, DtaRegHdS0BeginAddrGet(pHdRegs));
+
+    if (IsOutput)
+    {
+        // Workaround for TT#2152, TT#2153: no K28.5 symbols in IDLE. Set port to hold
+        // instead of idle. No practical difference.
+        DtaRegHdCtrl1SetRxTxCtrl(pHdRegs, 1);
+    }
 
     return Status;
 }
@@ -1651,16 +1731,18 @@ static DtStatus  DtaNonIpMatrixConfigureForAsi(
 static DtStatus  DtaNonIpMatrixConfigureForSdi(
     DtaNonIpPort* pNonIpPort, 
     Int64  StartFrame,
-    Bool  ForceConfig)
+    Int  ConfigMode)
 {
     DtStatus  Status = DT_STATUS_OK;
     Int  n, NewVidStd = DT_VIDSTD_UNKNOWN;
     Bool  ConfigRequired=FALSE, IsInput=FALSE, IsOutput=FALSE, IsLegacy=FALSE;
+    Bool  EnableVpidProc=TRUE, ForceConfig=FALSE;
     volatile UInt8* pHdRegs =  pNonIpPort->m_pRxRegs;
     DtaFrameBufConfig*  pBufConfig = &pNonIpPort->m_Matrix.m_BufConfig;
     DtaFrameBufSectionConfig*  pSections = pBufConfig->m_Sections;
     
-    DtDbgOut(MIN, NONIP, "Configuring for (XX-)SDI: DTA-%d, PortIdx %d", 
+    DtDbgOut(MIN, NONIP, "Configuring (mode=0x%04X) for (XX-)SDI: DTA-%d, PortIdx %d", 
+                                           ConfigMode, 
                                            pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber,
                                                                  pNonIpPort->m_PortIndex);
 
@@ -1668,13 +1750,16 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
     if (!pNonIpPort->m_CapSdi && !pNonIpPort->m_CapHdSdi && !pNonIpPort->m_Cap3GSdi)
         return DT_STATUS_NOT_SUPPORTED;
 
+    // Check for forced configuration
+    ForceConfig = (ConfigMode & DTA_MATRIX_CMODE_FORCE)!=0 ? TRUE : FALSE;
+    ConfigMode &= ~DTA_MATRIX_CMODE_FORCE;  // Remove force flag, leaving just the mode
+
     // Check if we have a legacy interface
     IsLegacy = DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort);
 
     // Check if reconfiguration is required
-    NewVidStd = DtaIoStdAndLevel2VidStd(pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value, 
-                                        pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_SubValue, 
-                                        pNonIpPort->m_IoCfg[DT_IOCONFIG_3GLVL].m_Value);
+    NewVidStd = DtaIoStd2VidStd(pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value, 
+                                       pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_SubValue);
     if (pNonIpPort->m_Matrix.m_State==MATRIX_PORT_UNINIT || 
                                     pNonIpPort->m_Matrix.m_State==MATRIX_PORT_CONFIGURING)
         ConfigRequired = TRUE;  // Port not yet intialised => configure required
@@ -1695,23 +1780,26 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
     if (!ConfigRequired && !ForceConfig)
     {
         DtDbgOut(MIN, NONIP, "No re-configuration of channel required");
+        
+        DtaNonIpMatrixSetVpidRegs(pNonIpPort);
 
         // Set to HOLD state
         DtaNonIpMatrixSetState(pNonIpPort, MATRIX_PORT_HOLD);
         return DT_STATUS_OK;
     }
     
+    // Enter configuring state
     DtaNonIpMatrixSetState(pNonIpPort, MATRIX_PORT_CONFIGURING);
-    
+
     // Disable channel before configuring 
     DtaRegHdCtrl1SetOpMode(pHdRegs, DT_HD_OPMODE_DISABLE);
     DtaRegHdCtrl1SetRxTxCtrl(pHdRegs, DT_HD_RXTXCTRL_IDLE);
-
-    // NOTE: must wait 100us after setting going to IDLE to allow HW to abort any 
+    
+    // NOTE: must wait 50us after going to IDLE to allow HW to abort any 
     // processing it was doing
-    DtWaitBlock(100);
+    DtWaitBlock(50);
 
-    //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Configure IO-direction -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+    //.-.-.-.-.-.-.-.-.-.-.-.-.-.- Configure IO-direction -.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
     IsInput = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_INPUT);
     IsOutput = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_OUTPUT);
@@ -1722,7 +1810,7 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
     else
         DT_ASSERT(1 == 0);
 
-    //.-.-.-.-.-.-.-.-.-.-.-.-.-.- Apply frame configuration -.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+    //.-.-.-.-.-.-.-.-.-.-.-.-.- Apply frame configuration -.-.-.-.-.-.-.-.-.-.-.-.-.-
 
     Status = DtaNonIpMatrixApplyConfig(pNonIpPort);
     if (!DT_SUCCESS(Status))
@@ -1733,7 +1821,17 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
     if (!DT_SUCCESS(Status))
         return Status;
 
-    //.-.-.-.-.-.-.-.-.-.-.-.-.-.- Enable relevant interrupts -.-.-.-.-.-.-.-.-.-.-.-.-.-.
+    //-.-.-.-.-.-.-.-.-.-.-.-.-.- Set VPID processing bit -.-.-.-.-.-.-.-.-.-.-.-.-.-.
+    // Disabled for inputs, enabled for outputs. 3G-level B inputs are a special
+    // case, we enable the processing for those.
+    EnableVpidProc = IsOutput;
+    if (IsInput && DtaVidStdIs3glvlBSdi(NewVidStd))
+    {
+        EnableVpidProc = TRUE;
+    }
+    DtaRegHdCtrl1SetNoVpidProc(pHdRegs, EnableVpidProc ? 0 : 1);
+
+    //.-.-.-.-.-.-.-.-.-.-.-.-.- Enable relevant interrupts -.-.-.-.-.-.-.-.-.-.-.-.-.
 
     Status = DtaNonIpMatrixInterruptEnable(pNonIpPort);
     if (!DT_SUCCESS(Status))
@@ -1742,8 +1840,8 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
         return Status;
     }
     
-    //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Set operation mode -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
-    
+    //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Set operation mode -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+
     if (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_SDI)
         DtaRegHdCtrl1SetOpMode(pHdRegs, DT_HD_OPMODE_SD);
     else if (pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value == DT_IOCONFIG_HDSDI)
@@ -1767,7 +1865,7 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
         // Check for GS2961 deserialiser
         if (pNonIpPort->m_AsiSdiDeserItfType == ASI_SDI_DESER_ITF_GS2961)
         {
-            Status = DtaGs2961Enable(pNonIpPort, FALSE/* SDI MODE*/);
+            Status = DtaGs2961Enable(pNonIpPort, FALSE/* SDI MODE*/, IsLegacy);
             if (!DT_SUCCESS(Status))
             {
                 DtDbgOut(ERR, NONIP, "Failed to enabled GS2961 for SDI");
@@ -1801,24 +1899,29 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
         }
     }
 
-    // For outputs: write black-frame
-    // NOTE: we need the interrupts (i.e. DMA done) to be enabled
-    if (pNonIpPort->m_pDvcData->m_IntEnableState==INT_ENABLED && IsOutput)
+    // For a full config of outputs: write a black-frame
+    // NOTE1: we need the interrupts (i.e. DMA done) to be enabled
+    // NOTE2: for a quick restart we skip this step as the black-frame has already been 
+    //        written to the card and DMA-ing a black-frame is time consuming task
+    if (IsOutput && ConfigMode==DTA_MATRIX_CMODE_FULL)
     {
-        // NOTE: for legacy HD-channels only write black frame if the desired start-frame
-        // is the black frame
-        if (!IsLegacy || (IsLegacy && StartFrame==DTA_FRMBUF_HOLD_FRAME))
+        if (pNonIpPort->m_pDvcData->m_IntEnableState == INT_ENABLED)
         {
-            Status = DtaNonIpMatrixWriteBlackFrame(pNonIpPort, DTA_FRMBUF_HOLD_FRAME);
-            if (!DT_SUCCESS(Status))
+            // NOTE: for legacy HD-channels only write black frame if the desired
+            // start-frame is the black frame
+            if (!IsLegacy || (IsLegacy && StartFrame==DTA_FRMBUF_HOLD_FRAME))
             {
-                DtDbgOut(ERR, NONIP, "Failed to init HOLD buffer with black-frame");
+                Status = DtaNonIpMatrixWriteBlackFrame(pNonIpPort, DTA_FRMBUF_HOLD_FRAME);
+                if (!DT_SUCCESS(Status))
+                {
+                    DtDbgOut(ERR, NONIP, "Failed to init HOLD buffer with black-frame");
 
-                return Status;
+                    return Status;
+                }
             }
         }
     }
-    
+          
     pNonIpPort->m_Matrix.m_CurFrame = StartFrame;
     n = DtaNonIpMatrixFrame2Index(pNonIpPort, StartFrame);
     
@@ -1866,7 +1969,7 @@ static DtStatus  DtaNonIpMatrixConfigureForSdi(
     // Set frame for after the first one, but NOT for the legacy interface
     if (!IsLegacy)
     {
-        // If we start with teh hold frame => next frame should also be the hold frame
+        // If we start with the hold frame => next frame should also be the hold frame
         if (StartFrame == DTA_FRMBUF_HOLD_FRAME)
             n = DtaNonIpMatrixFrame2Index(pNonIpPort, StartFrame);
         else
@@ -1905,7 +2008,8 @@ DtStatus  DtaNonIpMatrixPowerUpPost(DtaNonIpPort* pNonIpPort)
     
     DT_ASSERT(pNonIpPort->m_pDvcData->m_IntEnableState == INT_ENABLED);
     DtMutexAcquire(&pNonIpPort->m_Matrix.m_StateLock, -1);
-    Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, DTA_FRMBUF_HOLD_FRAME, TRUE);
+    Status = DtaNonIpMatrixConfigureForSdi(pNonIpPort, DTA_FRMBUF_HOLD_FRAME, 
+                                          DTA_MATRIX_CMODE_FULL | DTA_MATRIX_CMODE_FORCE);
     DtMutexRelease(&pNonIpPort->m_Matrix.m_StateLock);
     return Status;
 }
@@ -1917,14 +2021,20 @@ DtStatus  DtaNonIpMatrixApplyConfig(DtaNonIpPort* pNonIpPort)
     DtStatus  Status = DT_STATUS_OK;
     DtAvFrameProps*  pFrameProps = NULL;
     volatile UInt8* pHdRegs =  pNonIpPort->m_pRxRegs;
-    Int  VideoId, PictRate, Progressive;
-    
+    Bool  IsInput=FALSE, IsOutput=FALSE;
+
+    // Do we have an input or output
+    IsInput = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_INPUT) &&
+                 (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_SubValue == DT_IOCONFIG_INPUT);
+    IsOutput = (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value == DT_IOCONFIG_OUTPUT) &&
+                (pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_SubValue == DT_IOCONFIG_OUTPUT);
+        
     // First init frame porperties
     Status = DtaNonIpMatrixInitFrameProps(pNonIpPort);
     if (!DT_SUCCESS(Status))
         return Status;
     pFrameProps = &pNonIpPort->m_Matrix.m_FrameProps;
-
+    
     DtDbgOut(AVG, NONIP, "Frame Properties (PortIdx %d):", pNonIpPort->m_PortIndex);
     DtDbgOut(AVG, NONIP, "- # lines: %d", pFrameProps->m_NumLines);
     DtDbgOut(AVG, NONIP, "- Field1: f[%d:%d], v[%d:%d]", 
@@ -1956,21 +2066,150 @@ DtStatus  DtaNonIpMatrixApplyConfig(DtaNonIpPort* pNonIpPort)
     // 6. Set video format; except for legacy interface
     if (!DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort))
     {
-        Status = DtaNonIpMatrixVidStd2SdiFormat(pFrameProps->m_VidStd, 
-                                                       &VideoId, &PictRate, &Progressive);
-        if (!DT_SUCCESS(Status))
+        Int  VidStd = pFrameProps->m_VidStd;
+        DtaNonIpMatrixSetVpidRegs(pNonIpPort);
+
+        // Set interlaced flag
+        DtaRegHdFrameConfig1SetInterlaced(pHdRegs, pFrameProps->m_IsInterlaced ? 1 : 0);
+        // Select fractional or non-fractional clock
+        // NOTE: For SD, always select the non-fractional clock
+        if (DtaVidStdIsSdSdi(pFrameProps->m_VidStd))
+            DtaRegHdCtrl2SetFracClockSel(pHdRegs, 0);
+        else
+            DtaRegHdCtrl2SetFracClockSel(pHdRegs, pFrameProps->m_IsFractional ? 1 : 0);
+        // Enable level A<=>B converter when in 3G-level-B 'mode'
+        if (DtaVidStdIs3glvlBSdi(VidStd))
+            DtaRegHdCtrl2SetLvlBConvEn(pHdRegs, 1);
+        else
+            DtaRegHdCtrl2SetLvlBConvEn(pHdRegs, 0);
+    }
+
+    // 7. Set pixel delay for to tune gen lock offset
+    if (!DtaNonIpMatrixUsesLegacyHdChannelInterface(pNonIpPort))
+    {
+        Int  PixelDelay=0;
+        
+        if (IsInput)
+            PixelDelay = 0; // For inputs set the delay to 0 by definition
+        else
         {
-            DtDbgOut(ERR, NONIP, "Unknown video standard (0x%X)", pFrameProps->m_VidStd);
-            return Status;
+            Int  OutDelayPs, DelayNs, PixelsPerLine, Fps, LineDurationNs, PixelDurationPs;
+
+            Fps = DtaVidStd2Fps(pFrameProps->m_VidStd);
+            DT_ASSERT(Fps > 0);
+            LineDurationNs = (1000000000 / Fps) / pFrameProps->m_NumLines;
+            if (pFrameProps->m_IsFractional)
+                LineDurationNs = (LineDurationNs*1001) / 1000;
+
+            PixelsPerLine = DtAvGetNumPixelsPerLine(pFrameProps->m_VidStd);
+            if (PixelsPerLine <= 0)
+            {
+                DT_ASSERT(PixelsPerLine > 0);
+                return DT_STATUS_FAIL;
+            }
+            PixelDurationPs = (LineDurationNs*1000) / PixelsPerLine;
+
+            // FW starts tx with EAV of first line, but timing sync-point leis 
+            // "halfway through" the HANC, so need to compensate for this delay
+            OutDelayPs = (pFrameProps->m_SyncPointPixelOff) * PixelDurationPs;
+            DT_ASSERT(OutDelayPs >= 0);
+
+            // Add the serialiser delay (depends on the video standard)
+            if (DtaVidStdIs3gSdi(pFrameProps->m_VidStd))
+                OutDelayPs  += (pNonIpPort->m_AsiSdiSerDelayNs3g * 1000);
+            else if (DtaVidStdIsHdSdi(pFrameProps->m_VidStd))
+                OutDelayPs  += (pNonIpPort->m_AsiSdiSerDelayNsHd * 1000);
+            else if (DtaVidStdIsSdSdi(pFrameProps->m_VidStd))
+                OutDelayPs  += (pNonIpPort->m_AsiSdiSerDelayNsSd * 1000);
+            DT_ASSERT(OutDelayPs >= 0);
+                       
+            // Compute the delay we need to add to get in genlock
+            DelayNs = (pNonIpPort->m_TofAlignOffsetNs) - (OutDelayPs/1000);
+            // Convert to #pixels
+            PixelDelay = ((DelayNs*1000) + (PixelDurationPs/2)) / PixelDurationPs;
+
+            // Add extra pixel delay
+            PixelDelay += pNonIpPort->m_Matrix.m_ExtraPixelDelay;
+            // Clip pixel delay to (0..65535)
+            if (PixelDelay < 0)            PixelDelay = 0;
+            else if (PixelDelay > 0xFFFF)  PixelDelay = 0xFFFF;
+                
+            DtDbgOut(MIN, NONIP, "Pixel delay settings (PortIdx %d):", 
+                                                                 pNonIpPort->m_PortIndex);
+            DtDbgOut(MIN, NONIP, "- TofAlignmentOffset=%dns, OutDelay=%dns", 
+                                       pNonIpPort->m_TofAlignOffsetNs, (OutDelayPs/1000));
+            DtDbgOut(MIN, NONIP, "- Pixel delay=%dns:%dpx; Extra=%dpx", DelayNs, 
+                                      PixelDelay, pNonIpPort->m_Matrix.m_ExtraPixelDelay);
         }
 
-        DtaRegHdSdiFormatSetVideoId(pHdRegs, VideoId);
-        DtaRegHdSdiFormatSetPictureRate(pHdRegs, PictRate);
-        DtaRegHdSdiFormatSetProgressive(pHdRegs, Progressive);
+        // Apply pixel delay setting
+        DtaRegHdFrameConfig7SetPixelDelay(pHdRegs, PixelDelay);
     }
 
     // (re-)compute buffer configuration
     return DtaNonIpMatrixComputeBufferConfig(pNonIpPort);
+}
+
+//.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixSetVpidRegs -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+//
+DtStatus  DtaNonIpMatrixSetVpidRegs(DtaNonIpPort* pNonIpPort)
+{
+    DtStatus  Status = DT_STATUS_OK;
+    DtAvFrameProps*  pFrameProps = &pNonIpPort->m_Matrix.m_FrameProps;
+    volatile UInt8* pHdRegs =  pNonIpPort->m_pRxRegs;
+
+    Int  TypeNumber = pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber;
+    Int  FirmwareVersion = pNonIpPort->m_pDvcData->m_DevInfo.m_FirmwareVersion;
+    Int  VidStd = pFrameProps->m_VidStd;
+    UInt  Vpid1, Vpid2;
+    UInt  Line1=0, Line2=0;
+    Status = GetSmptePayloadId(VidStd, &Vpid1);
+    if (!DT_SUCCESS(Status))
+    {
+        DtDbgOut(ERR, NONIP, "Unknown video standard (0x%X)", pFrameProps->m_VidStd);
+        return Status;
+    }
+    Vpid1 = ((Vpid1&0xFF)<<24) | ((Vpid1&0xFF00)<<8) | ((Vpid1&0xFF0000)>>8) |(Vpid1>>24);
+    Vpid2 = Vpid1 | 0x40000000;
+    if ((TypeNumber==2154 && FirmwareVersion<5) ||
+                                                (TypeNumber==2174 && FirmwareVersion<2))
+    {
+        // Temporary workaround: firmware only accepts 0 or 3 for those bits.
+        if ((Vpid1&0xC000) != 0)
+            Vpid1 |= 0xC000;
+        if ((Vpid2&0xC000) != 0)
+            Vpid2 |= 0xC000;
+    }
+    else if (pNonIpPort->m_CapMatrix2)
+    {
+        // Allow VPID overrides by API in case the card can handle it
+        if (pNonIpPort->m_Matrix.m_Vpid1 != 0)
+            Vpid1 = pNonIpPort->m_Matrix.m_Vpid1;
+        if (pNonIpPort->m_Matrix.m_Vpid2 != 0)
+            Vpid2 = pNonIpPort->m_Matrix.m_Vpid2;
+    }
+
+    Line1 = pFrameProps->m_SwitchingLines[0] + 3;
+    if (pFrameProps->m_SwitchingLines[1] != -1)
+        Line2 = pFrameProps->m_SwitchingLines[1] + 3;
+    else if (DtaVidStdIs3glvlBSdi(VidStd))
+        Line2 = 572;
+
+    if (DtaVidStdIs3glvlBSdi(VidStd) &&
+                        pNonIpPort->m_IoCfg[DT_IOCONFIG_IODIR].m_Value==DT_IOCONFIG_INPUT)
+    {
+        // Firmware ignores line numbers and simply extracts any valid VPID from the
+        // correct link.
+        Line1 = 0xFFFF;
+        Line2 = 0xFFFF;
+    }
+        
+    DtaRegHdSdiFormat1Set(pHdRegs, Vpid1);
+    DtaRegHdSdiFormat2Set(pHdRegs, Vpid2);
+    DtaRegHdFrameConfig6SetVpidLine1(pHdRegs, Line1);
+    DtaRegHdFrameConfig6SetVpidLine2(pHdRegs, Line2);
+
+    return Status;
 }
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaNonIpMatrixApplyBufferConfig -.-.-.-.-.-.-.-.-.-.-.-.-.-.
@@ -2025,10 +2264,8 @@ DtStatus  DtaNonIpMatrixApplyBufferConfig(DtaNonIpPort* pNonIpPort)
 //
 DtStatus  DtaNonIpMatrixInitFrameProps(DtaNonIpPort* pNonIpPort)
 {
-    Int  VidStd = DtaIoStdAndLevel2VidStd(
-                                        pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value, 
-                                        pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_SubValue, 
-                                        pNonIpPort->m_IoCfg[DT_IOCONFIG_3GLVL].m_Value);
+    Int  VidStd = DtaIoStd2VidStd(pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_Value,
+                                       pNonIpPort->m_IoCfg[DT_IOCONFIG_IOSTD].m_SubValue);
     return DtAvGetFrameProps(VidStd, &pNonIpPort->m_Matrix.m_FrameProps);
 }
 
@@ -2167,6 +2404,7 @@ Int  DtaNonIpMatrixGetDmaSize(
     Int  NumLines,
     Int DataFormat,
     Int  RgbMode,
+    Int  AncFlt,
     Int  Stride)
 {
     Int  NumSymbolBits=0, NumDmaBits=0;
@@ -2179,6 +2417,9 @@ Int  DtaNonIpMatrixGetDmaSize(
         NumSymbolBits = Stride * 8 * NumLines;
     } else {
         Int  NumSymbols = LineNumS * NumLines;
+
+        if (AncFlt==DT_MEMTR_ANCFLTMODE_HANCALL || AncFlt==DT_MEMTR_ANCFLTMODE_VANCALL)
+            NumSymbols += 8;
 
         if (DataFormat == DT_MEMTR_DATAFMT_16B)
             NumSymbolBits = NumSymbols * 16;
@@ -2261,6 +2502,10 @@ DtStatus  DtaNonIpMatrixSdiFormat2VidStd(
         Int  Id = DTA_NONIP_MATRIX_VIDSTD_2_FORMAT[i][1];
         Int  Rate = DTA_NONIP_MATRIX_VIDSTD_2_FORMAT[i][2];
         Int  Prog = DTA_NONIP_MATRIX_VIDSTD_2_FORMAT[i][3];
+        // Firmware will never report PSF in SdiStatus register. Instead it'll report
+        // the standard as interlaced. We check the VPID to differentiate between the two.
+        if (Prog == DT_HD_SDIFMT_PROGRESSIVE_PSF)
+            Prog = DT_HD_SDIFMT_PROGRESSIVE_OFF;
 
         if (VideoId!=Id || PictRate!=Rate || Progressive!=Prog)
             continue;
@@ -2360,6 +2605,21 @@ static char*  VidStdName(Int VidStd)
     case DT_VIDSTD_1080P30:
         return "1080p30";
         break;
+    case DT_VIDSTD_1080PSF23_98:
+        return "1080psf23.98";
+        break;
+    case DT_VIDSTD_1080PSF24:
+        return "1080psf24";
+        break;
+    case DT_VIDSTD_1080PSF25:
+        return "1080psf25";
+        break;
+    case DT_VIDSTD_1080PSF29_97:
+        return "1080psf29.97";
+        break;
+    case DT_VIDSTD_1080PSF30:
+        return "1080psf30";
+        break;
     case DT_VIDSTD_1080I50:
         return "1080i50";
         break;
@@ -2372,11 +2632,20 @@ static char*  VidStdName(Int VidStd)
     case DT_VIDSTD_1080P50:
         return "1080p50";
         break;
+    case DT_VIDSTD_1080P50B:
+        return "1080p50b";
+        break;
     case DT_VIDSTD_1080P59_94:
         return "1080p59.94";
         break;
+    case DT_VIDSTD_1080P59_94B:
+        return "1080p59.94b";
+        break;
     case DT_VIDSTD_1080P60:
         return "1080p60";
+        break;
+    case DT_VIDSTD_1080P60B:
+        return "1080p60b";
         break;
     }
     return "Unknown";
@@ -2564,7 +2833,8 @@ DtStatus  DtaNonIpMatrixWriteBlackFrame(DtaNonIpPort*  pNonIpPort, Int64  Frame)
                 *pSav++ = VSync ? SAV_VSYNC[f] : SAV_VIDEO[f];
             }
 
-            if (l>3 && (l-3==pProps->m_SwitchingLines[0] || l-3==pProps->m_SwitchingLines[1]))
+            if (!pNonIpPort->m_CapMatrix2 && l>3 && 
+                (l-3==pProps->m_SwitchingLines[0] || l-3==pProps->m_SwitchingLines[1]))
             {
                 // Insert SMPTE 352M video payload ID 3 lines after switching line
                 Int  SymbolOffset = 1;
@@ -2724,8 +2994,23 @@ UInt  DtaNonIpMatrixDmaWriteFinished(DtaNonIpPort* pNonIpPort, Int TrCmd)
 void  DtaNonIpMatrixPeriodicInt(DtaNonIpPort* pNonIpPort)
 {
     Int  FifoLoad;
+    DtaIoConfigValue  CfgValue;
+    DT_ASSERT(pNonIpPort != NULL);
+
     // The GetFifoLoad function will also set the overflow flag if an overflow occurred.
     DtaMatrixAsiRxGetFifoLoad(pNonIpPort, &FifoLoad);
+
+    DtaNonIpIoConfigGet(pNonIpPort, DT_IOCONFIG_IODIR, &CfgValue);
+    if (CfgValue.m_Value == DT_IOCONFIG_OUTPUT)
+    {
+        // Process TX flags
+        DtaNonIpTxProcessFlagsFromDpc(pNonIpPort);
+    }
+    else if (CfgValue.m_Value == DT_IOCONFIG_INPUT)
+    {
+        // Process RX flags
+        DtaNonIpRxProcessFlagsFromDpc(pNonIpPort);
+    }
 }
 
 #ifdef _DEBUG
@@ -2805,7 +3090,8 @@ const char*  DtaNonIpMatrixState2Str(DtaMatrixPortState State)
     case MATRIX_PORT_CONFIGURING:   return "CONFIGURING";
     case MATRIX_PORT_IDLE:          return "IDLE";
     case MATRIX_PORT_HOLD:          return "HOLD";
-    case MATRIX_PORT_RUN:           return "RUN";
+    case MATRIX_PORT_RUN_AUTO:      return "RUN_AUTO";
+    case MATRIX_PORT_RUN_MAN:       return "RUN_MAN";
     default:                        return "UNKNOWN";
     }
 }

@@ -1,11 +1,12 @@
-//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* EthPrtcls.h *#*#*#*#*#*#*#*#* (C) 2005-2012 DekTec
+//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* EthPrtcls.h *#*#*#*#*#*#*#*#* (C) 2005-2015 DekTec
 //  
 //  Note: Only defines that are likely to be used in our implementation are defined.
 //        Refer to the standardized protocol specifications for more details.
+//
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2005-2012 DekTec Digital Video B.V.
+// Copyright (C) 2005-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +14,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -85,6 +84,9 @@
 #define RTP_PAYLOAD_MPEGII      0x21        // Payload Type MPEG-II
 #define RTP_PAYLOAD_FEC         0x60        // Payload Type Forward Error Control (FEC) 
                                             // packets
+#define RTP_PAYLOAD_SDI         0x62        // Payload Type SDI
+#define RTP_PAYLOAD_FEC_SDI     0x63        // Payload Type SDI FEC
+
 #define RTP_HDR_VERSION2        0x02        // RTP Version 2
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DVB Related Defines -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
@@ -128,6 +130,9 @@
 #define RTP_HDR_EXT_LENGTH      4           // Fixed RTP header extension length (bytes) 
                                             // (exclusive DTA-160 timestamp!!)
 #define FEC_HDR_LENGTH          16          // FEC header length (bytes)
+#define HBR_MEDIAPL_HDR_LENGTH  8           // HBR Media Payload Length (bytes)
+
+#define SMPTE_2022_6_PAYLOAD_SIZE 1376
 
 #pragma pack (push, 1)
 
@@ -221,7 +226,7 @@ typedef struct _IpHeaderV4
     UInt16  m_HeaderChecksum;
     UInt8   m_SrcAddress[4];
     UInt8   m_DstAddress[4];
-    UInt16  m_OptionsL;    
+    UInt16  m_OptionsL;
     UInt16  m_OptionsH;
     UInt8   m_Padding;
 } IpHeaderV4;
@@ -244,7 +249,6 @@ typedef struct _IpV6Options {
     UInt8  m_NextHeader;
     UInt8  m_HeaderExtLength;   // Excluding the first byte
 } IpV6Options;
-
 
 typedef struct _IcmpHeader {
     UInt16  m_Type            :8;
@@ -301,7 +305,9 @@ typedef struct _RtpHeader
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- FecHeader -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
-typedef struct _FecHeader 
+// SMPTE-2022-1 (TS)
+//
+typedef struct _FecHeader
 {
     UInt16  m_SnBase;
     UInt16  m_LengthRecovery;
@@ -319,6 +325,31 @@ typedef struct _FecHeader
     UInt8   m_SnBaseExt;
 } FecHeader;
 
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- FecHeader2022_5 -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+// SMPTE-2022-5 (SDI)
+//
+typedef struct _FecHeader2022_5
+{
+    UInt8   m_CCRecovery    :4;
+    UInt8   m_XRecovery     :1;
+    UInt8   m_PRecovery     :1;
+    UInt8   m_R             :1;
+    UInt8   m_E             :1;
+    UInt8   m_PtRecovery    :7;
+    UInt8   m_MRecovery     :1;
+    UInt16  m_SnBase;
+    UInt32  m_TsRecovery;
+    UInt16  m_LengthRecovery;
+    UInt16  m_Reserved;
+    UInt8  m_OffsetH       :8;
+    UInt8  m_Reserved2     :6;
+    UInt8  m_OffsetL       :2;
+    UInt8  m_NAH           :8;
+    UInt8  m_Reserved3     :6;
+    UInt8  m_NAL           :2;
+} FecHeader2022_5;
+
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- RtpExtension -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 typedef struct _RtpExtension
 {
@@ -326,13 +357,62 @@ typedef struct _RtpExtension
     UInt16 m_Length;
 } RtpExtension;
 
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- HbrMediaPlHeader -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+//
+// Media payload header for SMPTE-2022-6 (SDI)
+//
+typedef struct _HbrMediaPlHeader
+{
+    UInt8  m_Vsid          :3;
+    UInt8  m_F             :1;
+    UInt8  m_Ext           :4;
+    UInt8  m_FRCount;
+    UInt8  m_CfH           :1;
+    UInt8  m_Fec           :3;
+    UInt8  m_S             :2;
+    UInt8  m_R             :2;
+    UInt8  m_Reserved      :5;
+    UInt8  m_CfL           :3;
+    
+    struct{ // Only if m_F==1 (always the case for SMPTE-2022-6)
+    UInt8  m_FrameH:4;
+    UInt8  m_Map:4;
+    UInt8  m_FrateH:4;
+    UInt8  m_FrameL:4;
+    UInt8  m_Sample:4;
+    UInt8  m_FrateL:4;
+    UInt8  m_FmtReserve:8;
+    } VSF; // Video Source Format
+} HbrMediaPlHeader;
+//
+// HbrMediaPlExtension:
+// m_F=0: VSF struct excluded
+// If m_CF==1: UInt32 Video Timestamp
+// If m_Ext==1: UInt32 HeaderExtension == 0: No extension
+// == 1..111: Payload header is extended by this number * 4 bytes
+
+//.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- SdiRxFrameStat -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
+//
+// If DTAPI_RXMODE_SDI_STAT is enabled, 16 extra bytes are added to the start of the frame
+// to indicate some statistics.
+//
+typedef struct _SdiRxFrameStat
+{
+    UInt32  m_FrameCount;       // SDI Framecount SMPTE-2022
+    UInt32  m_Timestamp;        // RTP Timestamp first IP packet of frame
+    UInt32  m_MinIpat;          // Units of 54MHz
+    UInt32  m_MaxIpat;          // Units of 54MHz
+    UInt64  m_Spare1;
+    UInt64  m_Spare2;
+} SdiRxFrameStat;
+
 #pragma pack (pop)
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DmaTxHeader definition -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 //
-typedef struct _DtaDmaTxHeaderGen 
+typedef struct _DtaDmaTxHeaderGen
 {
-   struct 
+   struct
     {
         UInt32  m_PacketLength      : 11;   // Excluding DMA header
         UInt32  m_Reserved1         : 11;
@@ -349,8 +429,8 @@ typedef struct _DtaDmaTxHeaderGen
 } DtaDmaTxHeaderGen;
 
 typedef struct _DtaDmaTxHeaderV3
-{   
-    struct 
+{
+    struct
     {
         UInt32  m_PacketLength      : 11;   // Excluding DMA header
         UInt32  m_Reserved1         : 11;
@@ -414,7 +494,7 @@ typedef struct _DtaDmaRxHeaderGen
 
 typedef struct _DtaDmaRxHeaderV2
 {
-    struct 
+    struct
     {
         UInt32  m_Zero              : 1;
         UInt32  m_CRCError          : 1;
@@ -526,16 +606,23 @@ typedef struct _DtaDmaRxHeader
                                             // (L*D)+(L*D)+extra store for incoming pckts
 
 // Default values. Can be overruled by user
-#define  MAX_FEC_RECONSTR_ELEMENTS  20      // (L,D <= 20, L*D<=100, L+D max 20) for FEC
-#define  MAX_NUM_RTP_DVB_PACKETS    100     // (L*D = 100)
+#define  MAX_FEC_RECONSTR_ELEMENTS_TS   20   // (L,D <= 20, L*D<=100, L+D max 20) for FEC
+#define  MAX_FEC_RECONSTR_ELEMENTS_SDI  1020 // (L max 1020, D max 255) for FEC
+#define  MAX_NUM_RTP_PACKETS_TS         100  // (L*D = 100)
+#define  MAX_NUM_RTP_PACKETS_SDI        1500 // (L*D <= 1500)
 
 
-#define  DTA_IPRX_MAX_RTP_PACKETS   ((MAX_FEC_RECONSTR_ELEMENTS +                        \
-                                            MAX_NUM_RTP_DVB_PACKETS) * MAX_NUM_FEC_MATRIX)
-                                           // ((L+D)+(L*D)) * NumMatrix
+#define  DTA_IPRX_MAX_RTP_PACKETS_SDI   ((MAX_FEC_RECONSTR_ELEMENTS_SDI +                \
+                                        MAX_NUM_RTP_PACKETS_SDI) * MAX_NUM_FEC_MATRIX)
+                                        // ((L+D)+(L*D)) * NumMatrix
+#define  DTA_IPRX_MAX_RTP_PACKETS_TS    ((MAX_FEC_RECONSTR_ELEMENTS_TS +                 \
+                                        MAX_NUM_RTP_PACKETS_TS) * MAX_NUM_FEC_MATRIX)
+                                        // ((L+D)+(L*D)) * NumMatrix
 
 #define  DTA_IPRX_MAX_PACKET_LENGTH (DT_IP_MAX_PACKET_SIZE+sizeof(DtaDmaRxHeader))
-#define  DTA_IPRX_BUFRTPSIZE        (DTA_IPRX_MAX_RTP_PACKETS *                          \
+#define  DTA_IPRX_BUFRTPSIZE_TS         (DTA_IPRX_MAX_RTP_PACKETS_TS *                   \
+                                                               DTA_IPRX_MAX_PACKET_LENGTH)
+#define  DTA_IPRX_BUFRTPSIZE_SDI        (DTA_IPRX_MAX_RTP_PACKETS_SDI *                  \
                                                                DTA_IPRX_MAX_PACKET_LENGTH)
 #define DTA_IPRX_RTP_LIST_ENTRY_SIZE 40 // Estimated value of sizeof(RtpListEntry)
 
@@ -568,7 +655,5 @@ typedef struct _IpRxBufferHeader
     // IpBufSize (scratch buffer for RTP/FEC packets used in driver)
     // The TsBufSize and IpBufSize are set to default values when allocating this buffer.
 } IpRxBufferHeader;
-
-
 
 #endif  // __ETHPRTCLS_H__

@@ -1,11 +1,11 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IoConfig.c *#*#*#*#*#*#*#*#* (C) 2010-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IoConfig.c *#*#*#*#*#*#*#*#* (C) 2010-2015 DekTec
 //
 // Dta driver - IO configuration - Definition of IO configuration types/functions
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -59,8 +57,6 @@ static DtStatus  DtaIoConfigUpdateLoadNonVolatileStorage(DtaDeviceData* pDvcData
                                                              DtaIoConfigUpdate*  pUpdate);
 static DtStatus  DtaIoConfigUpdateValidate(DtaDeviceData* pDvcData,
                                                              DtaIoConfigUpdate*  pUpdate);
-static DtStatus  DtaIoConfigUpdateValidate3GLvl(DtaNonIpPort* pNonIpPort, 
-                                         DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateIoDir(DtaNonIpPort* pNonIpPort, 
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateIoStd(DtaNonIpPort* pNonIpPort, 
@@ -83,12 +79,11 @@ static DtStatus  DtaIoConfigUpdateValidateGenLocked(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateGenRef(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
-static DtStatus  DtaIoConfigUpdateValidateGpsRef(DtaNonIpPort* pNonIpPort,
-                                         DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigUpdateValidateFracMode(DtaNonIpPort* pNonIpPort,
                                          DtaIoConfigNonIpPortUpdate*, DtaIoConfigUpdate*);
 static DtStatus  DtaIoConfigWriteToNonVolatileStorage(DtaNonIpPort*  pNonIpPort,
                                                 Int  IoGroup, DtaIoConfigValue  CfgValue);
+static DtStatus  DtaIoConfigUpdateValidateGenRefBoard(DtaDeviceData*, DtaIoConfigUpdate*);
 
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Global data -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
@@ -162,7 +157,7 @@ DtStatus  DtaIoConfigInit(DtaDeviceData* pDvcData)
 
             // Delete the registry settings for this device.
             if (!DT_SUCCESS(DtNonVolatileSettingsDelete(&pDvcData->m_Driver, 
-                                                           pDvcData->m_DevInfo.m_Serial,
+                                                           pDvcData->m_DevInfo.m_UniqueId,
                                                            pDvcData->m_NumNonIpPorts+
                                                            pDvcData->m_NumIpPorts)))
                 DtDbgOut(ERR, IOCONFIG, "Error deleting registry key");
@@ -283,12 +278,7 @@ DtStatus  DtaIoConfigSet(
 
     // Get exclusive access lock to prevent ports from being opened/closed and other
     // IO configs from being applied
-    Result = DtFastMutexAcquire(&pDvcData->m_ExclAccessMutex);
-    if (pDvcData->m_RegistryWriteBusy)
-    {
-        DtFastMutexRelease(&pDvcData->m_ExclAccessMutex);
-        return DT_STATUS_BUSY;
-    }
+    Result = DtaDeviceAcquireExclAccess(pDvcData);
     
     // First do IoConfigSet for IP ports. We assume here that IoConfigs for IP and
     // non-IP ports are completely unrelated. To do this properly we should validate
@@ -488,6 +478,7 @@ static DtStatus  DtaIoConfigUpdateApply(
                 if (!DT_SUCCESS(Result))
                 {
                     pDvcData->m_RegistryWriteBusy = FALSE;
+                    DtEventSet(&pDvcData->m_RegWriteDoneEvt);
                     return Result;
                 }
 
@@ -499,6 +490,7 @@ static DtStatus  DtaIoConfigUpdateApply(
         }
     }
     pDvcData->m_RegistryWriteBusy = FALSE;
+    DtEventSet(&pDvcData->m_RegWriteDoneEvt);
     return DT_STATUS_OK;
 }
 
@@ -556,7 +548,7 @@ static DtStatus  DtaIoConfigUpdateLoadNonVolatileStorage(
         for (IoConfig=0; IoConfig<DT_IOCONFIG_COUNT; IoConfig++)
         {
             Result = DtIoConfigReadFromNonVolatileStorage(&pDvcData->m_Driver,
-                                                      pDvcData->m_DevInfo.m_Serial,
+                                                      pDvcData->m_DevInfo.m_UniqueId,
                                                       pNonIpPort->m_PortIndex, IoConfig,
                                                       &pPortUpdate->m_CfgValue[IoConfig]);
             if (!DT_SUCCESS(Result) && Result!=DT_STATUS_NOT_FOUND)
@@ -603,11 +595,6 @@ static DtStatus  DtaIoConfigUpdateValidate(
     {
         pNonIpPort = &pDvcData->m_pNonIpPorts[NonIpPortIndex];
         pPortUpdate = &pUpdate->m_pNonIpPortUpdate[NonIpPortIndex];
-
-        // Validate DT_IOCONFIG_3GLVL
-        Result = DtaIoConfigUpdateValidate3GLvl(pNonIpPort, pPortUpdate, pUpdate);
-        if (!DT_SUCCESS(Result))
-            return Result;
                 
         // Validate DT_IOCONFIG_IODIR
         Result = DtaIoConfigUpdateValidateIoDir(pNonIpPort, pPortUpdate, pUpdate);
@@ -659,11 +646,6 @@ static DtStatus  DtaIoConfigUpdateValidate(
         if (!DT_SUCCESS(Result))
             return Result;
         
-        // Validate DT_IOCONFIG_GPSREF
-        Result = DtaIoConfigUpdateValidateGpsRef(pNonIpPort, pPortUpdate, pUpdate);
-        if (!DT_SUCCESS(Result))
-            return Result;
-
         // Validate DT_IOCONFIG_FRACMODE
         Result = DtaIoConfigUpdateValidateFracMode(pNonIpPort, pPortUpdate, pUpdate);
         if (!DT_SUCCESS(Result))
@@ -674,42 +656,10 @@ static DtStatus  DtaIoConfigUpdateValidate(
         if (!DT_SUCCESS(Result))
             return Result;
     }
+    // Validate if genref/genlock configs are consistent at board-level
+    Result = DtaIoConfigUpdateValidateGenRefBoard(pDvcData, pUpdate);
+
     return Result;
-}
-
-//.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidate3GLvl -.-.-.-.-.-.-.-.-.-.-.-.-.-.
-//
-static DtStatus  DtaIoConfigUpdateValidate3GLvl(
-    DtaNonIpPort* pNonIpPort, 
-    DtaIoConfigNonIpPortUpdate*  pPortUpdate,
-    DtaIoConfigUpdate* pUpdate)
-{
-    DtDbgOut(MAX, IOCONFIG, "Configuration 3GLVL Value: %d SubValue: %d",
-                                   pPortUpdate->m_CfgValue[DT_IOCONFIG_3GLVL].m_Value,
-                                   pPortUpdate->m_CfgValue[DT_IOCONFIG_3GLVL].m_SubValue);
-
-    switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_3GLVL].m_Value)
-    {
-    case DT_IOCONFIG_NONE:
-        // Not applicable should only be set when we do not support level A/LevelB
-        DT_ASSERT(!pNonIpPort->m_Cap3GLvlA && !pNonIpPort->m_Cap3GLvlB);
-        break;
-    case DT_IOCONFIG_3GLVLA:
-        // Must a have 3G-SDI level A capability
-        if (!pNonIpPort->m_Cap3GLvlA)
-            return DT_STATUS_CONFIG_ERROR;
-        break;
-
-    case DT_IOCONFIG_3GLVLB:
-        // Must a have 3G-SDI level B capability
-        if (!pNonIpPort->m_Cap3GLvlB)
-            return DT_STATUS_CONFIG_ERROR;
-        break;
-
-    default:
-        return DT_STATUS_CONFIG_ERROR;
-    }
-    return DT_STATUS_OK;
 }
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateIoDir -.-.-.-.-.-.-.-.-.-.-.-.-.-.
@@ -948,12 +898,24 @@ static DtStatus  DtaIoConfigUpdateValidateIoStd(
             if (!pNonIpPort->m_Cap1080P50)
                 return DT_STATUS_CONFIG_ERROR;
             break;
+        case DT_IOCONFIG_1080P50B:
+            if (!pNonIpPort->m_Cap1080P50B)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
         case DT_IOCONFIG_1080P59_94:
             if (!pNonIpPort->m_Cap1080P59_94)
                 return DT_STATUS_CONFIG_ERROR;
             break;
+        case DT_IOCONFIG_1080P59_94B:
+            if (!pNonIpPort->m_Cap1080P59_94B)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
         case DT_IOCONFIG_1080P60:
             if (!pNonIpPort->m_Cap1080P60)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_1080P60B:
+            if (!pNonIpPort->m_Cap1080P60B)
                 return DT_STATUS_CONFIG_ERROR;
             break;
         default:
@@ -1007,6 +969,26 @@ static DtStatus  DtaIoConfigUpdateValidateIoStd(
             if (!pNonIpPort->m_Cap1080P30)
                 return DT_STATUS_CONFIG_ERROR;
             break;
+        case DT_IOCONFIG_1080PSF23_98:
+            if (!pNonIpPort->m_Cap1080Psf23_98)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_1080PSF24:
+            if (!pNonIpPort->m_Cap1080Psf24)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_1080PSF25:
+            if (!pNonIpPort->m_Cap1080Psf25)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_1080PSF29_97:
+            if (!pNonIpPort->m_Cap1080Psf29_97)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_1080PSF30:
+            if (!pNonIpPort->m_Cap1080Psf30)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
         case DT_IOCONFIG_720P23_98:
             if (!pNonIpPort->m_Cap720P23_98)
                 return DT_STATUS_CONFIG_ERROR;
@@ -1053,6 +1035,10 @@ static DtStatus  DtaIoConfigUpdateValidateIoStd(
         break;
     case DT_IOCONFIG_MOD:
         if (!pNonIpPort->m_CapMod)
+            return DT_STATUS_CONFIG_ERROR;
+        break;
+    case DT_IOCONFIG_PHASENOISE:
+        if (!pNonIpPort->m_CapPhaseNoise)
             return DT_STATUS_CONFIG_ERROR;
         break;
     case DT_IOCONFIG_RS422:
@@ -1124,14 +1110,14 @@ static DtStatus  DtaIoConfigUpdateValidateRfClkSel(
     {
     case DT_IOCONFIG_NONE:
         // Not applicable should only be set when we do not support ext RF clock
-        DT_ASSERT(!pNonIpPort->m_CapRfClkExt && !pNonIpPort->m_CapRfClkInt);
-        break;
-    case DT_IOCONFIG_RFCLKEXT:
-        if (!pNonIpPort->m_CapRfClkExt)
-            return DT_STATUS_CONFIG_ERROR;
+        DT_ASSERT(!pNonIpPort->m_CapRfClkInt && !pNonIpPort->m_CapRfClkExt);
         break;
     case DT_IOCONFIG_RFCLKINT:
         if (!pNonIpPort->m_CapRfClkInt)
+            return DT_STATUS_CONFIG_ERROR;
+        break;
+    case DT_IOCONFIG_RFCLKEXT:
+        if (!pNonIpPort->m_CapRfClkExt)
             return DT_STATUS_CONFIG_ERROR;
         break;
     default:
@@ -1140,6 +1126,7 @@ static DtStatus  DtaIoConfigUpdateValidateRfClkSel(
 
     return DT_STATUS_OK;
 }
+
 
 //.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateSpiClkSel -.-.-.-.-.-.-.-.-.-.-.-.-.
 //
@@ -1380,11 +1367,6 @@ static DtStatus  DtaIoConfigUpdateValidateGenLocked(
     DtaIoConfigNonIpPortUpdate*  pPortUpdate,
     DtaIoConfigUpdate* pUpdate)
 {
-    DtaDeviceData*  pDvcData = pNonIpPort->m_pDvcData;
-    Bool  GenRefEnabled = FALSE;
-    Int  i = 0;
-    DtaNonIpPort*  pOtherNonIpPort = NULL;
-    
     DtDbgOut(MAX, IOCONFIG, "Configuration GENLOCKED Value: %d SubValue: %d",
                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GENLOCKED].m_Value,
                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GENLOCKED].m_SubValue);
@@ -1400,32 +1382,6 @@ static DtStatus  DtaIoConfigUpdateValidateGenLocked(
     case DT_IOCONFIG_TRUE:
         if (!pNonIpPort->m_CapGenLocked)
             return DT_STATUS_CONFIG_ERROR;
-
-        // Check if a genref port has been set
-        for (i=0; i<pDvcData->m_NumNonIpPorts; i++)
-        {
-            pOtherNonIpPort = &pDvcData->m_pNonIpPorts[i];
-            if (pOtherNonIpPort->m_PortIndex == pNonIpPort->m_PortIndex)
-                continue;   // Skip ourselves
-            if (!pOtherNonIpPort->m_CapGenRef)
-                continue;   // Skip port that does not support genref
-
-            // Check genref is enabled on other port
-            if (pUpdate->m_pNonIpPortUpdate[i].m_CfgValue[DT_IOCONFIG_GENREF].m_Value
-                                                                      == DT_IOCONFIG_TRUE)
-            {
-                GenRefEnabled = TRUE;
-            }
-        }
-        // Special case for slave FPGAs: GenRef ports not controlled by this driver,
-        // so just assume that one is set. Check should be done in DTAPI.
-        if (pDvcData->m_DevInfo.m_SubDvc > 0)
-            GenRefEnabled = TRUE;
-        if (!GenRefEnabled)
-        {
-            DtDbgOut(ERR, IOCONFIG, "No genref port has been set");
-            return DT_STATUS_CONFIG_ERROR;
-        }
         break;
     default:
         return DT_STATUS_CONFIG_ERROR;
@@ -1441,15 +1397,10 @@ static DtStatus  DtaIoConfigUpdateValidateGenRef(
     DtaIoConfigNonIpPortUpdate*  pPortUpdate,
     DtaIoConfigUpdate* pUpdate)
 {
-    Int  i, RefVidStd;
-    DtaNonIpPort*  pOtherNonIpPort = NULL;
-    DtaDeviceData*  pDvcData = pNonIpPort->m_pDvcData;
-
+    Int  IoStdVal;
     DtDbgOut(MAX, IOCONFIG, "Configuration GENREF Value: %d SubValue: %d",
                                   pPortUpdate->m_CfgValue[DT_IOCONFIG_GENREF].m_Value,
                                   pPortUpdate->m_CfgValue[DT_IOCONFIG_GENREF].m_SubValue);
-
-    RefVidStd = (Int)pPortUpdate->m_CfgValue[DT_IOCONFIG_GENREF].m_ParXtra[0];
     
     switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_GENREF].m_Value)
     {
@@ -1462,30 +1413,6 @@ static DtStatus  DtaIoConfigUpdateValidateGenRef(
             DtDbgOut(ERR, IOCONFIG, "Genref not supported for port %i",
                                                                  pNonIpPort->m_PortIndex);
             return DT_STATUS_CONFIG_ERROR;
-        }
-        // Only check for genlocked port if this port was the genlock reference.
-        if (pDvcData->m_Genlock.m_RefPortIndex != pNonIpPort->m_PortIndex)
-            break;
-
-        // You cannot disable Genref if an output port has Genlocked enabled
-        for (i=0; i<pDvcData->m_NumNonIpPorts; i++)
-        {
-            pOtherNonIpPort = &pDvcData->m_pNonIpPorts[i];
-            if (pOtherNonIpPort->m_PortIndex == pNonIpPort->m_PortIndex)
-                continue;   // Skip ourselves
-            if (!pOtherNonIpPort->m_CapGenLocked)
-                continue;   // Skip port that does not support genlock
-
-            // Check genlocked is enabled on other ports
-            if (pUpdate->m_pNonIpPortUpdate[i].m_CfgValue[DT_IOCONFIG_GENLOCKED].m_Value
-                                                                      == DT_IOCONFIG_TRUE)
-            {
-                DtDbgOut(ERR, IOCONFIG, "Port %i has genlock enabled. Genref of Port %i"
-                                   " can not be disabled.", 
-                                   pOtherNonIpPort->m_PortIndex, pNonIpPort->m_PortIndex);
-            
-                return DT_STATUS_CONFIG_ERROR;
-            }
         }
         break;
 
@@ -1504,35 +1431,14 @@ static DtStatus  DtaIoConfigUpdateValidateGenRef(
             DtDbgOut(ERR, IOCONFIG, "Port %i is not an input", pNonIpPort->m_PortIndex);
             return DT_STATUS_CONFIG_ERROR;
         }
-
-        // Only one port may be enabled as genlock reference
-        for (i=0; i<pDvcData->m_NumNonIpPorts; i++)
+        // Port must be configured for SDI
+        IoStdVal = pPortUpdate->m_CfgValue[DT_IOCONFIG_IOSTD].m_Value;
+        if (IoStdVal!=DT_IOCONFIG_SDI && IoStdVal!=DT_IOCONFIG_HDSDI &&
+                                                              IoStdVal!=DT_IOCONFIG_3GSDI)
         {
-            pOtherNonIpPort = &pDvcData->m_pNonIpPorts[i];
-            if (pOtherNonIpPort->m_PortIndex == pNonIpPort->m_PortIndex)
-                continue;   // Skip ourselves
-            if (!pOtherNonIpPort->m_CapGenRef)
-                continue;   // Skip port that does not support genref
-
-            // Check genref is disabled on other port
-            if (pUpdate->m_pNonIpPortUpdate[i].m_CfgValue[DT_IOCONFIG_GENREF].m_Value
-                                                                      == DT_IOCONFIG_TRUE)
-            {
-                DtDbgOut(ERR, IOCONFIG, "Port %i already enabled genref. Port %i can not"
-                   " be enabled.", pOtherNonIpPort->m_PortIndex, pNonIpPort->m_PortIndex);
-            
-                return DT_STATUS_CONFIG_ERROR;
-            }
-        }
-
-        // Check port supports specified reference video standard
-        if (!DtaNonIpIsVidStdSupported(pNonIpPort, RefVidStd))
-        {
-            DtDbgOut(ERR, IOCONFIG, "Video standard %i not supported for port %i",
-                                                      RefVidStd, pNonIpPort->m_PortIndex);
+            DtDbgOut(ERR, IOCONFIG, "Port %i is not an input", pNonIpPort->m_PortIndex);
             return DT_STATUS_CONFIG_ERROR;
         }
-
         break;
 
     default:
@@ -1545,42 +1451,6 @@ static DtStatus  DtaIoConfigUpdateValidateGenRef(
     return DT_STATUS_OK;
 }
 
-//-.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateGpsRef -.-.-.-.-.-.-.-.-.-.-.-.-.-.
-//
-static DtStatus  DtaIoConfigUpdateValidateGpsRef(
-    DtaNonIpPort* pNonIpPort, 
-    DtaIoConfigNonIpPortUpdate*  pPortUpdate,
-    DtaIoConfigUpdate* pUpdate)
-{
-    Int  i;
-    DtaNonIpPort*  pNonIpBuddyPort;
-    DtaDeviceData*  pDvcData = pNonIpPort->m_pDvcData;
-    
-    DtDbgOut(MAX, IOCONFIG, "Configuration GPSREF Value: %d SubValue: %d",
-                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_Value,
-                                pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_SubValue);
-
-    switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_GPSREF].m_Value)
-    {
-    case DT_IOCONFIG_NONE:
-        // Not applicable should only be set when we do not support GPSREF configuration
-        DT_ASSERT(!pNonIpPort->m_CapGpsRef);
-        break;
-    case DT_IOCONFIG_FALSE:
-        // Must support GPSREF configuration
-        if (!pNonIpPort->m_CapGpsRef || !pNonIpPort->m_CapRfClkInt)
-            return DT_STATUS_CONFIG_ERROR;
-        break;
-    case DT_IOCONFIG_TRUE:
-       // Must support GPSREF configuration
-         if (!pNonIpPort->m_CapGpsRef || !pNonIpPort->m_CapRfClkExt)
-            return DT_STATUS_CONFIG_ERROR;
-         break;
-    default:
-        return DT_STATUS_CONFIG_ERROR;
-    }    
-    return DT_STATUS_OK;
-}
 //.-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateFracMode -.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
 static DtStatus  DtaIoConfigUpdateValidateFracMode(
@@ -1631,6 +1501,49 @@ static DtStatus  DtaIoConfigUpdateValidateFracMode(
     return DT_STATUS_OK;
 }
 
+//-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigUpdateValidateGenRefBoard -.-.-.-.-.-.-.-.-.-.-.-.-
+//
+static DtStatus  DtaIoConfigUpdateValidateGenRefBoard(
+    DtaDeviceData*  pDvcData,
+    DtaIoConfigUpdate* pUpdate)
+{
+    Int  i, NumGenlock=0, NumGenRef=0;
+    Bool  HasVirtualGenref = FALSE;
+
+    // You cannot disable Genref if an output port has Genlocked enabled
+    for (i=0; i<pDvcData->m_NumNonIpPorts; i++)
+    {
+        DtaNonIpPort*  pNonIpPort = &pDvcData->m_pNonIpPorts[i];
+        if (pNonIpPort->m_CapGenRef)
+        {
+            if (pUpdate->m_pNonIpPortUpdate[i].m_CfgValue[DT_IOCONFIG_GENREF].m_Value
+                                                                      == DT_IOCONFIG_TRUE)
+                NumGenRef++;
+            if (pNonIpPort->m_CapVirtual)
+                HasVirtualGenref = TRUE;
+        }
+        if (pNonIpPort->m_CapGenLocked)
+        {
+            if (pUpdate->m_pNonIpPortUpdate[i].m_CfgValue[DT_IOCONFIG_GENLOCKED].m_Value
+                                                                      == DT_IOCONFIG_TRUE)
+                NumGenlock++;
+        }
+    }
+
+    // More than one genref port is not supported
+    if (NumGenRef > 1)
+        return DT_STATUS_CONFIG_ERROR;
+    // Devices with a virtual genref port must always have exactly one port configured
+    // as genref port
+    if (NumGenRef==0 && HasVirtualGenref)
+        return DT_STATUS_CONFIG_ERROR;
+    // If any port is configured as genlock port we must have a genref port as well.
+    // Ignore this for sub-devices.
+    if (NumGenlock>0 && NumGenRef==0 && pDvcData->m_DevInfo.m_SubDvc==0)
+        return DT_STATUS_CONFIG_ERROR;
+    return DT_STATUS_OK;
+}
+
 //-.-.-.-.-.-.-.-.-.-.-.-.- DtaIoConfigWriteToNonVolatileStorage -.-.-.-.-.-.-.-.-.-.-.-.-
 //
 static DtStatus  DtaIoConfigWriteToNonVolatileStorage(
@@ -1656,7 +1569,7 @@ static DtStatus  DtaIoConfigWriteToNonVolatileStorage(
         return Result;
 
     Result = DtNonVolatileSettingsStringWrite(&pDvcData->m_Driver, 
-                                    pDvcData->m_DevInfo.m_Serial, pNonIpPort->m_PortIndex,
+                                  pDvcData->m_DevInfo.m_UniqueId, pNonIpPort->m_PortIndex,
                                                       GroupName, "ConfigValue", StrValue);
     if (!DT_SUCCESS(Result))
         return Result;
@@ -1667,7 +1580,7 @@ static DtStatus  DtaIoConfigWriteToNonVolatileStorage(
         return Result;
 
     Result = DtNonVolatileSettingsStringWrite(&pDvcData->m_Driver, 
-                                    pDvcData->m_DevInfo.m_Serial, pNonIpPort->m_PortIndex,
+                                  pDvcData->m_DevInfo.m_UniqueId, pNonIpPort->m_PortIndex,
                                                    GroupName, "ConfigSubValue", StrValue);
     if (!DT_SUCCESS(Result))
         return Result;
@@ -1676,7 +1589,7 @@ static DtStatus  DtaIoConfigWriteToNonVolatileStorage(
     for (ParXtraIdx=0; ParXtraIdx<DT_MAX_PARXTRA_COUNT; ParXtraIdx++)
     {
         Result = DtNonVolatileSettingsValueWrite(&pDvcData->m_Driver,
-                                    pDvcData->m_DevInfo.m_Serial, pNonIpPort->m_PortIndex,
+                                  pDvcData->m_DevInfo.m_UniqueId, pNonIpPort->m_PortIndex,
                                              GroupName, (Char*)IoParXtraNames[ParXtraIdx], 
                                                           CfgValue.m_ParXtra[ParXtraIdx]);
         if (!DT_SUCCESS(Result))

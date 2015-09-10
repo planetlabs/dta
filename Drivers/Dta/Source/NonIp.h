@@ -1,11 +1,11 @@
-//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* NonIp.h *#*#*#*#*#*#*#*#*#* (C) 2010-2012 DekTec
+//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* NonIp.h *#*#*#*#*#*#*#*#*#* (C) 2010-2015 DekTec
 //
 // Dta driver - Non IP functionality - Declaration of generic non IP port functionality
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -135,12 +133,17 @@ typedef enum _DtaMatrixPortState
     MATRIX_PORT_CONFIGURING,    // Port is being configured
     MATRIX_PORT_IDLE,           // Port is IDLE state (not receiving/transmitting)
     MATRIX_PORT_HOLD,           // Port is in HOLD state (playing black-frames)
-    MATRIX_PORT_RUN             // Port is running (transmitting/receiving)
+    MATRIX_PORT_RUN_AUTO,       // Port is running (transmitting/receiving), frame idx
+                                // is automatically increased by driver
+    MATRIX_PORT_RUN_MAN,        // Port is running (transmitting/receiving), next frame
+                                // is under user control
 } DtaMatrixPortState;
 
 typedef struct _DtaMatrixFrameInfo
 {
-    Int64  m_RefClk;            // Latched version of reference clock at new frame int.
+    Int64  m_RefClkStart;       // Latched version of reference clock at new frame int
+    Int64  m_RefClkEnd;         // Latched version of reference clock at end of frame
+    Int  m_TopHalf;             // True for first part of 3g level B frame
 } DtaMatrixFrameInfo;
 
 // DtaMatrixPort
@@ -148,7 +151,7 @@ typedef struct _DtaMatrixPort
 {
     volatile DtaMatrixPortState  m_State;  // Channel state
     DtMutex  m_StateLock;       // Mutex to protect MATRIX state (m_State)
-    volatile DtaMatrixPortState  m_LastStateAtInt;  
+    DtaMatrixPortState  m_LastStateAtInt;  
                                 // Last state seen by interrupt routine. NOTE: only 
                                 // interrupt routine may write to this variable
 
@@ -158,14 +161,20 @@ typedef struct _DtaMatrixPort
     
     DtDpc  m_LastFrameIntDpc;   // DPC for last-frame-interrupt 
     DtEvent  m_LastFrameIntEvent;  // Event to signal last-frame-interrupt
-
-    DtDpc  m_RxErrIntDpc;       // DPC for RX ovf and RX sync error interrupts
-
+    
     volatile Int64  m_CurFrame; // Frame currently being transmitted/received
     volatile Int64  m_LastFrame;  // Last transmitted/received frame
     volatile Int64  m_NextFrame;  // Forced next frame to transmit/receive
     volatile Int64  m_SofFrame; // Frame transmitted/received @SOF-interrupt-event
     volatile Int  m_SofLine;    // Line transmitted/received @SOF-interrupt-event
+    volatile Int64  m_FrmIntCnt; // Frame interrupt counter
+    Int  m_ForceRestart;        // Force restart in interrupt routine
+
+    UInt32  m_Vpid1;            // VPID forced by API
+    UInt32  m_Vpid2;            // VPID forced by API (for 3G lvl B 2nd link)
+
+    Int  m_ExtraPixelDelay;     // Additional delay (in #pixels) to apply to the output.
+                                // NOTE: the dleay is relative to the GENREF TOF
 
     DtaMatrixFrameInfo  m_FrameInfo[DTA_FRMBUF_MAX_FRAMES];
 
@@ -197,9 +206,6 @@ typedef struct _DtaNonIpPort
     DtaDeviceData*  m_pDvcData;
 
     // Capabilities
-    // 3GLVL (3G-SDI level) - Capabilities
-    Bool  m_Cap3GLvlA;
-    Bool  m_Cap3GLvlB;
     // IODIR (I/O direction) - Capabilities
     Bool  m_CapDisabled;
     Bool  m_CapInput;
@@ -213,6 +219,9 @@ typedef struct _DtaNonIpPort
     Bool  m_CapLoopThr;
     // IOPROPS (I/O properties) - Capabilities
     Bool  m_CapMatrix;
+    Bool  m_CapMatrix2;
+    Bool  m_CapVirtual;
+    Bool  m_CapGenRefSlave;
     // IOSTD (I/O standard) - Capabilities
     Bool  m_Cap3GSdi;
     Bool  m_CapAsi;
@@ -221,6 +230,7 @@ typedef struct _DtaNonIpPort
     Bool  m_CapIfAdc;
     Bool  m_CapIp;
     Bool  m_CapMod;
+    Bool  m_CapPhaseNoise;
     Bool  m_CapSdi;
     Bool  m_CapSpi;
     Bool  m_CapSpiSdi;
@@ -239,6 +249,11 @@ typedef struct _DtaNonIpPort
     Bool  m_Cap1080P25;
     Bool  m_Cap1080P29_97;
     Bool  m_Cap1080P30;
+    Bool  m_Cap1080Psf23_98;
+    Bool  m_Cap1080Psf24;
+    Bool  m_Cap1080Psf25;
+    Bool  m_Cap1080Psf29_97;
+    Bool  m_Cap1080Psf30;
     Bool  m_Cap720P23_98;
     Bool  m_Cap720P24;
     Bool  m_Cap720P25;
@@ -249,8 +264,11 @@ typedef struct _DtaNonIpPort
     Bool  m_Cap720P60;
     // IOSTD - SDI (3G-SDI) - Sub capabilities
     Bool  m_Cap1080P50;
+    Bool  m_Cap1080P50B;
     Bool  m_Cap1080P59_94;
+    Bool  m_Cap1080P59_94B;
     Bool  m_Cap1080P60;
+    Bool  m_Cap1080P60B;
     // RFCLKSEL (RF clock source selection) - Capabilities
     Bool  m_CapRfClkExt;
     Bool  m_CapRfClkInt;
@@ -276,7 +294,6 @@ typedef struct _DtaNonIpPort
     Bool  m_CapFailSafe;
     Bool  m_CapGenLocked;
     Bool  m_CapGenRef;
-    Bool  m_CapGpsRef;
     Bool  m_CapSwS2Apsk;
     Bool  m_CapRs422;
 
@@ -287,6 +304,12 @@ typedef struct _DtaNonIpPort
     // ASI/SDI interface
     Int  m_AsiSdiDeserItfType;
     Int  m_AsiSdiSerItfType;
+    Int  m_AsiSdiSerDelayNsSd, m_AsiSdiSerDelayNsHd, m_AsiSdiSerDelayNs3g;
+                                // Specifies the pipeline delay (in ns) of the serial 
+                                // interface for SDI signals. This delay must be 
+                                // compensated for by the genlock logic to properly align
+                                // to the genlock reference signal.
+
     
     // Current IO configuration
     DtaIoConfigValue  m_IoCfg[DT_IOCONFIG_COUNT];
@@ -298,7 +321,6 @@ typedef struct _DtaNonIpPort
     // Status flags
     Int  m_Flags;
     Int  m_FlagsLatched;
-    Bool  m_TxUfl;
     DtSpinLock  m_FlagsSpinLock;
 
     // Firmware register mapping
@@ -341,6 +363,9 @@ typedef struct _DtaNonIpPort
     // RS-422 API
     DtaRs422Port  m_Rs422;
 
+    // Genlocking
+    Int  m_TofAlignOffsetNs;    // Offset in ns with which the TOF arrive at serialiser
+
 } DtaNonIpPort;
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Public functions -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
@@ -366,12 +391,15 @@ DtStatus  DtaNonIpIoConfigSet(DtaNonIpPort* pNonIpPort, Int Code,
                                                                DtaIoConfigValue CfgValue);
 DtStatus  DtaNonIpReleaseResourceFromFileObject(DtaDeviceData* pDvcData, 
                                                                      DtFileObject* pFile);
+DtStatus  DtaNonIpGetGenRefProps(DtaNonIpPort* pNonIpPort, 
+                                                       DtaIoctlNonIpGenRefProps*  pProps);
+DtStatus  DtaNonIpNotifyGenRefProp(DtaNonIpPort* pNonIpPort, 
+                                                       DtaIoctlNonIpGenRefProps*  pProps);
 void  DtaNonIpPowerdown(DtaNonIpPort* pNonIpPort);
 DtStatus  DtaNonIpPowerdownPre(DtaNonIpPort* pNonIpPort);
 void  DtaNonIpEstimateRate(DtaNonIpPort* pNonIpPort);
 Int  DtaNonIpGetEstimatedRate(DtaNonIpPort* pNonIpPort);
 Bool  DtaNonIpIsVidStdSupported(DtaNonIpPort* pNonIpPort, Int  VidStd);
-
 
 DtStatus  DtaNonIpMatrixClose(DtaNonIpPort* pNonIpPort, DtFileObject* pFile);
 DtStatus  DtaNonIpMatrixConfigure(DtaNonIpPort* pNonIpPort, Bool  ForceConfig);
@@ -383,9 +411,11 @@ DtStatus  DtaNonIpMatrixPowerUpPost(DtaNonIpPort* pNonIpPort);
 DtStatus  DtaNonIpMatrixAttachToRow(DtaNonIpPort* pNonIpPort, Int  RowIdx);
 DtStatus  DtaNonIpMatrixSetAsiCtrl(DtaNonIpPort* pNonIpPort, Int  AsiCtrl);
 DtStatus  DtaNonIpMatrixSetState(DtaNonIpPort* pNonIpPort, DtaMatrixPortState  NewState);
-DtStatus  DtaNonIpMatrixStart(DtaNonIpPort* pNonIpPort, Int64  StartFrame);
+DtStatus  DtaNonIpMatrixStart(DtaNonIpPort* pNonIpPort, Int64  StartFrame, Bool  AutoMode,
+                                                                      Bool  ForceRestart);
 DtStatus  DtaNonIpMatrixStop(DtaNonIpPort* pNonIpPort);
 DtStatus  DtaNonIpMatrixGetCurrentFrame(DtaNonIpPort* pNonIpPort, Int64*  pFrame);
+DtStatus  DtaNonIpMatrixSetNextFrame(DtaNonIpPort* pNonIpPort, Int64  NextFrame);
 DtStatus  DtaNonIpMatrixPrepForDma(DtaNonIpPort* pNonIpPort, Int  BufSize, 
                                              const DtaMatrixMemTrSetup*,  Int*  pDmaSize);
 DtStatus  DtaNonIpMatrixGetReqDmaSize(DtaNonIpPort* pNonIpPort, 

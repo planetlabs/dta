@@ -1,11 +1,12 @@
-//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtRegs.h *#*#*#*#*#*#*#*#*# (C) 2011-2012 DekTec
+//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtRegs.h *#*#*#*#*#*#*#*#*# (C) 2011-2015 DekTec
 //
 // DtRegs - Definition of register sets used for all devices DTA/DTU(/DTE) 
 // This file contains register offsets with mask and shift defines.
+//
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2011-2012 DekTec Digital Video B.V.
+// Copyright (C) 2011-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +14,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -170,7 +169,7 @@
 //.-.-.-.-.-.-.-.-.-.-.-.- General Control0 Register: Bit fields -.-.-.-.-.-.-.-.-.-.-.-.-
 #define DT_GEN_CONTROL0_DBLBUF_MSK     0x00000001
 #define DT_GEN_CONTROL0_DBLBUF_SH      0
-#define DT_GEN_CONTROL0_DEMOD_MSK      0x00000001     // DTU-236 DEMOD/ASI mode
+#define DT_GEN_CONTROL0_DEMOD_MSK      0x00000001     // DTU-236/238 DEMOD/ASI mode
 #define DT_GEN_CONTROL0_DEMOD_SH       0
 #define DT_GEN_CONTROL0_VCOEN_MSK      0x00000002
 #define DT_GEN_CONTROL0_VCOEN_SH       1
@@ -382,6 +381,9 @@
 #define DT_TX_REG_MOD_CONTROL1         0x0028
 #define DT_TX_REG_MOD_CONTROL2         0x002C   // for modulator channel
 #define DT_TX_REG_MOD_CHANLEVEL        0x0030
+
+// Phase modulator registers
+#define DT_TX_REG_PHASENOISE_CONTROL   0x0020   // Phase noise control
 
 // Non-modulation registers
 #define DT_TX_REG_TXCLOCK_MOD          0x002C   // for ASI/SDI channel
@@ -668,7 +670,7 @@
 #define DT_TXSRCCTRL1_MNINTINC_SH      4
 
 //.-.-.-.-.-.-.-.-.-.- Tx Modulation NCO control register: Bit fields -.-.-.-.-.-.-.-.-.-.
-#define DT_TXNCOCTRL_NOISE_GAIN_MSK    0x00000001
+#define DT_TXNCOCTRL_NOISE_GAIN_MSK    0x0000001F
 #define DT_TXNCOCTRL_NOISE_GAIN_SH     0
 #define DT_TXNCOCTRL_CARRIER_LEVEL_MSK 0x3C000000
 #define DT_TXNCOCTRL_CARRIER_LEVEL_SH  26
@@ -695,6 +697,9 @@
 #define DT_TXTSYNCSTAT_ERRINV_MSK      0x0000F000
 #define DT_TXTSYNCSTAT_ERRINV_SH       16
 
+//-.-.-.-.-.-.-.- Tx Phase noise modulation controls register: Bit fields -.-.-.-.-.-.-.-.
+#define DT_TXTPNCTRL_ENABLE_MSK      0x00000001
+#define DT_TXTPNCTRL_ENABLE_SH       0
 
 
 //+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ RF registers +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
@@ -991,9 +996,15 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_RX_TIMESTAMP                8
 #define DT_RX_TIMESTAMP32              8
 #define DT_RX_TIMESTAMP64              16
+
+
 // SDI
 #define DT_RXMODE_SDI_FULL             0
 #define DT_RXMODE_SDI_ACTVID           1
+
+// SDI FLAGS
+#define DT_RXMODE_SDI_STAT             0x1000
+
 
 // Rx Control: AsiInv values
 #define DT_POLARITY_AUTO               0
@@ -1105,7 +1116,7 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_HD_REG_SOFFRM_LSB            0x0020
 #define DT_HD_REG_SOFFRM_MSB            0x0024
 #define DT_HD_REG_SOFLINE               0x0028
-#define DT_HD_REG_SDIFORMAT             0x002C
+#define DT_HD_REG_SDIFORMAT1            0x002C
 #define DT_HD_REG_SDISTATUS             0x0030
 #define DT_HD_REG_MEMTRCTRL             0x0034
 #define DT_HD_REG_MEMTRSTAT             0x0038
@@ -1127,10 +1138,15 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_HD_REG_MEMTRNUMB_ASI         0x0078
 #define DT_HD_REG_ASIRATE               0x007C
 #define DT_HD_REG_GS29XXSPI             0x0080
+#define DT_HD_REG_FRM_TIME_LSB          0x0088
+#define DT_HD_REG_FRM_TIME_MSB          0x008C
 #define DT_HD_REG_S0_NEXTFRM_ADDR       0x0090
 #define DT_HD_REG_S1_NEXTFRM_ADDR       0x0094
 #define DT_HD_REG_FIFO_FIRST            0x0098
 #define DT_HD_REG_FIFO_LAST             0x009C
+#define DT_HD_REG_SDIFORMAT2            0x00A0
+#define DT_HD_REG_FRMCONF6              0x00A4
+#define DT_HD_REG_FRMCONF7              0x00A8
 
 #define DT_HD_REG_LMH0387SPI            0x0188  // NOTE: WE ASSUME THE CHANNEL SPI CONTROL 
                                                 // BLOCK IS LOCATED AT AN OFFSET (0x180)
@@ -1218,21 +1234,32 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_HD_CTRL2_REPFRM_SH            0
 #define DT_HD_CTRL2_REALIGN_MSK          0x00000002
 #define DT_HD_CTRL2_REALIGN_SH           1
+#define DT_HD_CTRL2_FRACCLKSEL_MSK       0x00000004
+#define DT_HD_CTRL2_FRACCLKSEL_SH        2
+#define DT_HD_CTRL2_LVLBCONVEN_MSK       0x00000008
+#define DT_HD_CTRL2_LVLBCONVEN_SH        3
 
-//.-.-.-.-.-.-.-.-.-.-.- // HD-Channel Status register: Bit Fields -.-.-.-.-.-.-.-.-.-.-.-
+
+//.-.-.-.-.-.-.-.-.-.-.-.- HD-Channel Status register: Bit Fields -.-.-.-.-.-.-.-.-.-.-.-.
 
 #define  DT_HD_STATUS_RXLOCK_MSK        0x00000200
 #define  DT_HD_STATUS_RXLOCK_SH         9
 #define  DT_HD_STATUS_CD_MSK            0x00000400
 #define  DT_HD_STATUS_CD_SH             10
+#define  DT_HD_STATUS_CUR_LVLABFRM_MSK  0x00000800
+#define  DT_HD_STATUS_CUR_LVLABFRM_SH   11
 #define  DT_HD_STATUS_ASI_PCKSZ_MSK     0x06000000
 #define  DT_HD_STATUS_ASI_PCKSZ_SH      25
 #define  DT_HD_STATUS_ASIINV_MSK        0x08000000
 #define  DT_HD_STATUS_ASIINV_SH         27
 #define  DT_HD_STATUS_RXSYNCERRINT_MSK  0x10000000
 #define  DT_HD_STATUS_RXSYNCERRINT_SH   28
+#define  DT_HD_STATUS_TXSYNCERRINT_MSK  DT_HD_STATUS_RXSYNCERRINT_MSK
+#define  DT_HD_STATUS_TXSYNCERRINT_SH   DT_HD_STATUS_RXSYNCERRINT_SH
 #define  DT_HD_STATUS_RXOVFERRINT_MSK   0x20000000
 #define  DT_HD_STATUS_RXOVFERRINT_SH    29
+#define  DT_HD_STATUS_TXUFLERRINT_MSK   DT_HD_STATUS_RXOVFERRINT_MSK
+#define  DT_HD_STATUS_TXUFLERRINT_SH    DT_HD_STATUS_RXOVFERRINT_SH
 #define  DT_HD_STATUS_LASTFRMINT_MSK    0x80000000
 #define  DT_HD_STATUS_LASTFRMINT_SH     31
 
@@ -1253,19 +1280,22 @@ typedef union _DT_RFDAC_CONTROL
 #define  DT_VIDSTD_1080P25              0x010D
 #define  DT_VIDSTD_1080P29_97           0x018B
 #define  DT_VIDSTD_1080P30              0x010B
+#define  DT_VIDSTD_1080PSF23_98         0x0001
+#define  DT_VIDSTD_1080PSF24            0x0002
+#define  DT_VIDSTD_1080PSF25            0x0003
+#define  DT_VIDSTD_1080PSF29_97         0x0004
+#define  DT_VIDSTD_1080PSF30            0x0005
 #define  DT_VIDSTD_1080I50              0x014C
 #define  DT_VIDSTD_1080I59_94           0x01CA
 #define  DT_VIDSTD_1080I60              0x014A
 #define  DT_VIDSTD_1080P50              0x010C
 #define  DT_VIDSTD_1080P59_94           0x018A
 #define  DT_VIDSTD_1080P60              0x010A
+#define  DT_VIDSTD_1080P50B             0x030C
+#define  DT_VIDSTD_1080P59_94B          0x038A
+#define  DT_VIDSTD_1080P60B             0x030A
 
-#define  DT_VIDSTD_3GLVL_MASK           0xC000  // Mask for 3G-SDI level bits
-#define  DT_VIDSTD_3GLVLA               0x0000  // Level A
-                                        // NOTE: use 0 for backwards compatibility
-                                        // (i.e. DT_VIDSTD_1080P60|DT_VIDSTD_3GLVLA 
-                                        //                           == DT_VIDSTD_1080P60)
-#define  DT_VIDSTD_3GLVLB               0x4000  // Level B 
+#define  DT_VIDSTD_TS                   -1      // Special case
 
 
 //-.-.-.-.-.-.-.-.-.-.- HD-Channel LED Control register: Bit Fields -.-.-.-.-.-.-.-.-.-.-.
@@ -1335,6 +1365,7 @@ typedef union _DT_RFDAC_CONTROL
 // HD-Channel SDI Format register: Progressive values
 #define  DT_HD_SDIFMT_PROGRESSIVE_OFF    0x0
 #define  DT_HD_SDIFMT_PROGRESSIVE_ON     0x3
+#define  DT_HD_SDIFMT_PROGRESSIVE_PSF    0x1
 
 //-.-.-.-.-.-.-.-.-.-.- HD-Channel  SDI Status register: Bit Fields -.-.-.-.-.-.-.-.-.-.-.
 // NOTE: bit fields are identical to SDI Format register
@@ -1518,6 +1549,18 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_HD_FRMCONF5_VID2END_MSK      0xFFFF0000
 #define DT_HD_FRMCONF5_VID2END_SH       16
 
+//.-.-.-.-.-.-.-.-.-.- HD-Channel Frame Config 6 register: Bit Fields -.-.-.-.-.-.-.-.-.-.
+
+#define DT_HD_FRMCONF6_VPIDLINE1_MSK    0x0000FFFF
+#define DT_HD_FRMCONF6_VPIDLINE1_SH     0
+#define DT_HD_FRMCONF6_VPIDLINE2_MSK    0xFFFF0000
+#define DT_HD_FRMCONF6_VPIDLINE2_SH     16
+
+//.-.-.-.-.-.-.-.-.-.- HD-Channel Frame Config 7 register: Bit Fields -.-.-.-.-.-.-.-.-.-.
+
+#define DT_HD_FRMCONF7_PIXELDELAY_MSK   0x0000FFFF
+#define DT_HD_FRMCONF7_PIXELDELAY_SH    0
+
 //.-.-.-.-.-.-.-.-.- HD-Channel GS29XX SPI Control register: Bit Fields -.-.-.-.-.-.-.-.-.
 
 #define DT_HD_GS29XXSPI_DATA_MSK    0x0000FFFF
@@ -1610,10 +1653,16 @@ typedef union _DT_RFDAC_CONTROL
 #define DT_REG_FAST_FLASH_PROG_CTRL_BUSY_SH             0
 #define DT_REG_FAST_FLASH_PROG_CTRL_DATA_VALID_MSK      0x00000002
 #define DT_REG_FAST_FLASH_PROG_CTRL_DATA_VALID_SH       1
+
+// THESE FIELDS ARE DEPRECATED AND REPLACED BY SINGLE 3-BIT COMMAND FIELD
 #define DT_REG_FAST_FLASH_PROG_CTRL_READ_STATUS_CMD_MSK 0x00000004
 #define DT_REG_FAST_FLASH_PROG_CTRL_READ_STATUS_CMD_SH  2
 #define DT_REG_FAST_FLASH_PROG_CTRL_READ_DATA_CMD_MSK   0x00000008
 #define DT_REG_FAST_FLASH_PROG_CTRL_READ_DATA_CMD_SH    3
+// THESE FIELDS ARE DEPRECATED AND REPLACED BY SINGLE 3-BIT COMMAND FIELD
+
+#define DT_REG_FAST_FLASH_PROG_CTRL_COMMAND_MSK         0x0000001C
+#define DT_REG_FAST_FLASH_PROG_CTRL_COMMAND_SH          2
 
 //.-.-.-.-.-.- Fast-flash programming interface address register: Bit fields -.-.-.-.-.-.-
 

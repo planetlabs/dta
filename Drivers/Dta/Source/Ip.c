@@ -1,11 +1,11 @@
-//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* Ip.c *#*#*#*#*#*#*#*#*#*#*#*#* (C) 2012 DekTec
+//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* Ip.c *#*#*#*#*#*#*#*#*#*# (C) 2010-2015 DekTec
 //
 // Dta driver - IP functionality - Implementation of generic IP port functionality
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -321,7 +319,7 @@ DtStatus  DtaIpDeviceLoadAdminStatusConfig(
 
     Int64  Value = 0;
     Status = DtNonVolatileSettingsValueRead(&pDvcData->m_Driver, 
-                      pDvcData->m_DevInfo.m_Serial, -1,"NwAdminStatus", "Ignore", &Value);
+                    pDvcData->m_DevInfo.m_UniqueId, -1,"NwAdminStatus", "Ignore", &Value);
 
     *pAdminStatusConfig = FALSE;
     if (Value > 0)
@@ -1426,11 +1424,11 @@ DtStatus  DtaIpSharedBufferReady(
             pIpRxChannel->m_pFifo = pIpRxChannel->m_SharedBuffer.m_pBuffer +
                                                                  sizeof(IpRxBufferHeader);
             pIpRxChannel->m_FifoSize = pIpRxChannel->m_pBufferHeader->m_BufSize - 
-                                               DTA_IPRX_BUFWRAPSIZE - DTA_IPRX_BUFRTPSIZE;
+                                            DTA_IPRX_BUFWRAPSIZE - DTA_IPRX_BUFRTPSIZE_TS;
             // We create the RTP list also in the IP-buffer
             pIpRxChannel->m_pRtpListEntries = pIpRxChannel->m_pFifo + 
                                           pIpRxChannel->m_FifoSize + DTA_IPRX_BUFWRAPSIZE;
-            RtpBufSize =  DTA_IPRX_MAX_PACKET_LENGTH * DTA_IPRX_MAX_RTP_PACKETS;
+            RtpBufSize =  DTA_IPRX_MAX_PACKET_LENGTH * DTA_IPRX_MAX_RTP_PACKETS_TS;
             // Initialize RTP List entries
             pIpRxChannel->m_pRtpBuffer = DtaIpRxRtpListsInit(pIpRxChannel, RtpBufSize);
             // The jumbo packets are stored in the RTP buffers.

@@ -1,4 +1,4 @@
-//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtSal.h *#*#*#*#*#*#*#*#*#* (C) 2010-2012 DekTec
+//*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtSal.h *#*#*#*#*#*#*#*#*#* (C) 2010-2015 DekTec
 //
 // This file contains the driver SAL interface. A driver only needs to include this file
 // to use all the SAL support.
@@ -6,7 +6,7 @@
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -14,8 +14,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -29,6 +27,12 @@
 
 #ifndef __DT_SAL_H
 #define __DT_SAL_H
+
+#ifdef WINBUILD
+// When building under linux we get warnings for unused variables. Enable this specific
+// warning as well when building for linux so it gets spotted earlier.
+#pragma warning(3 : 4101)
+#endif
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Includes -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 
@@ -120,10 +124,10 @@
 
 // SAL related logging
 #define LOG_LEVEL_SAL         LOG_OFF
-#define LOG_LEVEL_SAL_DMA     LOG_MAX
-#define LOG_LEVEL_SAL_DPC     LOG_MAX
-#define LOG_LEVEL_SAL_THREAD  LOG_MAX
-#define LOG_LEVEL_SAL_USB     LOG_MAX
+#define LOG_LEVEL_SAL_DMA     LOG_AVG
+#define LOG_LEVEL_SAL_DPC     LOG_AVG
+#define LOG_LEVEL_SAL_THREAD  LOG_AVG
+#define LOG_LEVEL_SAL_USB     LOG_AVG
 
 
 //+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+ Generic type definitions +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+

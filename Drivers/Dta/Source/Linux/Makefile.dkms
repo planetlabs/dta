@@ -98,8 +98,11 @@ SRC    = $(SRCDIR)/Linux/DtaIal.o         \
          $(SRCDIR)/Gs296x.o               \
          $(SRCDIR)/Lmh1982.o              \
          $(SRCDIR)/Lmh1983.o              \
+         $(SRCDIR)/FanControl.o           \
+         $(SRCDIR)/Max6639.o              \
          $(SRCDIR)/FpgaGenlock.o          \
          $(SRCDIR)/Rs422.o                \
+         $(SRCDIR)/Ad9129.o               \
          $(SRCDIR)/Linux/DtaDeviceTable.o \
          Messages.o
 

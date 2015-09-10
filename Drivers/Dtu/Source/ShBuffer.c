@@ -1,11 +1,11 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* ShBuffer.c *#*#*#*#*#*#*#*#* (C) 2011-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* ShBuffer.c *#*#*#*#*#*#*#*#* (C) 2011-2015 DekTec
 //
 // Dtu driver - Dtu Shared user-driver buffer routines used DTU-351
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2011-2012 DekTec Digital Video B.V.
+// Copyright (C) 2011-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -171,11 +169,18 @@ DtStatus  DtuShBufferIoctl(
             break;
         case DTU_SH_BUF_CMD_CLOSE:
             if (pDvcData->m_pNonIpPorts!=NULL && 
-                                        pDvcData->m_pNonIpPorts[0].m_RxState==DTU_RX_READ)
+                                   pDvcData->m_pNonIpPorts[0].m_State==DTU3_STATE_READ351)
             {
-                pDvcData->m_pNonIpPorts[0].m_NextRxState = DTU_RX_CHECK_LOCK;
-                DtEventSet(&pDvcData->m_pNonIpPorts[0].m_RxStateChanged);
-                DtEventWait(&pDvcData->m_pNonIpPorts[0].m_RxStateChangeCmpl, -1);
+                pDvcData->m_pNonIpPorts[0].m_NextState = DTU3_STATE_DET_VIDSTD;
+                DtEventSet(&pDvcData->m_pNonIpPorts[0].m_StateChanged);
+                DtEventWait(&pDvcData->m_pNonIpPorts[0].m_StateChangeCmpl, -1);
+            }
+            else  if (pDvcData->m_pNonIpPorts!=NULL && 
+                                  pDvcData->m_pNonIpPorts[0].m_State==DTU3_STATE_WRITE315)
+            {
+                pDvcData->m_pNonIpPorts[0].m_NextState = DTU3_STATE_IDLE;
+                DtEventSet(&pDvcData->m_pNonIpPorts[0].m_StateChanged);
+                DtEventWait(&pDvcData->m_pNonIpPorts[0].m_StateChangeCmpl, -1);
             }
             Status = DtuShBufferClose(pShBuffer);
             break;

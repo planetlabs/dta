@@ -1,9 +1,9 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtEvent.c *#*#*#*#*#*#*#*#*# (C) 2010-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* DtEvent.c *#*#*#*#*#*#*#*#*# (C) 2010-2015 DekTec
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -11,8 +11,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -58,7 +56,7 @@ DtStatus  DtEventSet(DtEvent* pDtEvent)
     KeSetEvent(&pDtEvent->m_Event, 0, FALSE);
 #else
     pDtEvent->m_EventSet = TRUE;
-    wake_up_interruptible(&pDtEvent->m_WaitQueueHead);
+    wake_up(&pDtEvent->m_WaitQueueHead);
 #endif
     return DT_STATUS_OK;
 }
@@ -123,6 +121,92 @@ DtStatus  DtEventWait(DtEvent* pDtEvent, Int TimeoutMS)
         while (TRUE)
         {
             Jiffies = wait_event_interruptible_timeout(pDtEvent->m_WaitQueueHead,
+                                                   (pDtEvent->m_EventSet==TRUE), Jiffies);
+
+            if (Jiffies < 0)
+            {
+                Status = DT_STATUS_CANCELLED;
+                break;
+            }
+
+            if (Jiffies == 0)
+            {
+                Status = DT_STATUS_TIMEOUT;
+                break;
+            }
+
+            if (Jiffies > 0)
+            {
+                if (pDtEvent->m_EventSet)
+                {
+                    if (pDtEvent->m_AutoReset)
+                        pDtEvent->m_EventSet = FALSE;
+                    Status = DT_STATUS_OK;
+                }
+                if (Status == DT_STATUS_OK)
+                    break;
+            }
+
+            if (TimeoutMS < 0)
+                Jiffies = MAX_JIFFY_OFFSET;
+        }
+    }
+
+    
+#endif
+    return Status;
+}
+
+//-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- DtEventWaitUnInt -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+//
+// Non-interruptible wait. Sometimes necesary to make sure we clean up properly before
+// closing a driver handle or releasing a dma buffer.
+//
+DtStatus  DtEventWaitUnInt(DtEvent* pDtEvent, Int TimeoutMS)
+{
+    DtStatus  Status = DT_STATUS_FAIL;
+#ifdef WINBUILD
+    NTSTATUS  Result;
+    LARGE_INTEGER  Timeout;
+    LARGE_INTEGER*  pTimeout;
+    DT_ASSERT((KeGetCurrentIrql()<=APC_LEVEL && (TimeoutMS>0 || TimeoutMS==-1)) ||
+                                    (KeGetCurrentIrql()<=DISPATCH_LEVEL && TimeoutMS==0));
+
+    if (TimeoutMS >= 0)
+    {
+        Timeout.QuadPart = (Int64)TimeoutMS * -10000;
+        pTimeout = &Timeout;
+    } else
+        pTimeout = NULL;
+
+    Result = KeWaitForSingleObject(&pDtEvent->m_Event, Executive, KernelMode, FALSE,
+                                                                                pTimeout);
+    if (Result == STATUS_SUCCESS)
+        Status = DT_STATUS_OK;
+    else if (Result == STATUS_TIMEOUT)
+        Status = DT_STATUS_TIMEOUT;
+#else
+    long  Jiffies;
+
+    if (pDtEvent->m_EventSet)
+    {
+        if (pDtEvent->m_AutoReset)
+            pDtEvent->m_EventSet = FALSE;
+        Status = DT_STATUS_OK;
+    } else
+        Status = DT_STATUS_TIMEOUT;
+
+    // Should we sleep?
+    if ((Status!=DT_STATUS_OK) && (TimeoutMS!=0))
+    {
+        if (TimeoutMS < 0)
+            Jiffies = MAX_JIFFY_OFFSET;
+        else
+            Jiffies = msecs_to_jiffies(TimeoutMS);
+
+        while (TRUE)
+        {
+            Jiffies = wait_event_timeout(pDtEvent->m_WaitQueueHead,
                                                    (pDtEvent->m_EventSet==TRUE), Jiffies);
 
             if (Jiffies < 0)

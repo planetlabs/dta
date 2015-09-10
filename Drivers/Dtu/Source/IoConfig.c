@@ -1,11 +1,11 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IoConfig.c *#*#*#*#*#*#*#*#* (C) 2010-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IoConfig.c *#*#*#*#*#*#*#*#* (C) 2010-2015 DekTec
 //
 // Dtu driver - IO configuration - Definition of IO configuration types/functions
 //
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2010-2012 DekTec Digital Video B.V.
+// Copyright (C) 2010-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -13,8 +13,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -533,8 +531,6 @@ static DtStatus  DtuIoConfigUpdateValidate(
                 return DT_STATUS_CONFIG_ERROR;
             
             // If another port is set in APSK mode, we are not allowed to use this port
-            if (!pNonIpPort->m_CapSwS2Apsk)
-                break;            
             for (i=0; i<pDvcData->m_NumNonIpPorts; i++)
             {                
                 if(i != pNonIpPort->m_PortIndex)
@@ -549,6 +545,16 @@ static DtStatus  DtuIoConfigUpdateValidate(
             switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_IODIR].m_SubValue)
             {
             case DT_IOCONFIG_INPUT:
+                if (pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber == 236 ||
+                    pNonIpPort->m_pDvcData->m_DevInfo.m_TypeNumber == 238)
+                {
+                    // Only one of the two DTU-236/238 ports can be enabled at any time
+                    DtuIoConfigNonIpPortUpdate*  pPortUpdateBuddy =
+                                             &pUpdate->m_pNonIpPortUpdate[NonIpIndex ^ 1];
+                    if (pPortUpdateBuddy->m_CfgValue[DT_IOCONFIG_IODIR].m_Value !=
+                                                                     DT_IOCONFIG_DISABLED)
+                        return DT_STATUS_CONFIG_ERROR;
+                }
                 break;
             case DT_IOCONFIG_SHAREDANT:
                 // Must be a demodulator and antenna must be selectable
@@ -716,6 +722,26 @@ static DtStatus  DtuIoConfigUpdateValidate(
                 if (!pNonIpPort->m_Cap1080P30)
                     return DT_STATUS_CONFIG_ERROR;
                 break;
+            case DT_IOCONFIG_1080PSF23_98:
+                if (!pNonIpPort->m_Cap1080Psf23_98)
+                    return DT_STATUS_CONFIG_ERROR;
+                break;
+            case DT_IOCONFIG_1080PSF24:
+                if (!pNonIpPort->m_Cap1080Psf24)
+                    return DT_STATUS_CONFIG_ERROR;
+                break;
+            case DT_IOCONFIG_1080PSF25:
+                if (!pNonIpPort->m_Cap1080Psf25)
+                    return DT_STATUS_CONFIG_ERROR;
+                break;
+            case DT_IOCONFIG_1080PSF29_97:
+                if (!pNonIpPort->m_Cap1080Psf29_97)
+                    return DT_STATUS_CONFIG_ERROR;
+                break;
+            case DT_IOCONFIG_1080PSF30:
+                if (!pNonIpPort->m_Cap1080Psf30)
+                    return DT_STATUS_CONFIG_ERROR;
+                break;
             case DT_IOCONFIG_720P23_98:
                 if (!pNonIpPort->m_Cap720P23_98)
                     return DT_STATUS_CONFIG_ERROR;
@@ -807,26 +833,28 @@ static DtStatus  DtuIoConfigUpdateValidate(
             return DT_STATUS_CONFIG_ERROR;
         }
 
-        // Validate DT_IOCONFIG_BW
-        DtDbgOut(MAX, IOCONFIG, "Configuration BW Value: %d ParXtra0: %d",
+        // Ignore DT_IOCONFIG_BW
+        DtDbgOut(MAX, IOCONFIG, "Configuration BW Value: %d ParXtra0: %lld",
                                     pPortUpdate->m_CfgValue[DT_IOCONFIG_BW].m_Value,
                                     pPortUpdate->m_CfgValue[DT_IOCONFIG_BW].m_ParXtra[0]);
 
-        switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_BW].m_Value)
+        // Validate DT_IOCONFIG_PWRMODE
+        DtDbgOut(MAX, IOCONFIG, "Configuration PWRMODE Value: %d SubValue: %d",
+            pPortUpdate->m_CfgValue[DT_IOCONFIG_PWRMODE].m_Value,
+            pPortUpdate->m_CfgValue[DT_IOCONFIG_PWRMODE].m_SubValue);
+
+        switch (pPortUpdate->m_CfgValue[DT_IOCONFIG_PWRMODE].m_Value)
         {
         case DT_IOCONFIG_NONE:
-            // Not applicable should only be set when for devices that don't support
-            // usb3 isochronous mode
-            DT_ASSERT(!pNonIpPort->m_CapIsoBw);
+            // Not applicable should only be set when we do not support PWRMODE
+            DT_ASSERT(!pNonIpPort->m_CapLowPwr && !pNonIpPort->m_CapModHq);
             break;
-        case DT_IOCONFIG_FALSE:
-            // Never valid
-            return DT_STATUS_CONFIG_ERROR;
-            break;
-        case DT_IOCONFIG_TRUE:
-            if (!pNonIpPort->m_CapIsoBw)
+        case DT_IOCONFIG_LOWPWR:
+            if (!pNonIpPort->m_CapLowPwr)
                 return DT_STATUS_CONFIG_ERROR;
-            if (pPortUpdate->m_CfgValue[DT_IOCONFIG_BW].m_ParXtra[0] < 0)
+            break;
+        case DT_IOCONFIG_MODHQ:
+            if (!pNonIpPort->m_CapModHq)
                 return DT_STATUS_CONFIG_ERROR;
             break;
         default:
@@ -842,14 +870,14 @@ static DtStatus  DtuIoConfigUpdateValidate(
         {
         case DT_IOCONFIG_NONE:
             // Not applicable should only be set when we do not support ext RF clock
-            DT_ASSERT(!pNonIpPort->m_CapRfClkExt && !pNonIpPort->m_CapRfClkInt);
-            break;
-        case DT_IOCONFIG_RFCLKEXT:
-            if (!pNonIpPort->m_CapRfClkExt)
-                return DT_STATUS_CONFIG_ERROR;
+            DT_ASSERT(!pNonIpPort->m_CapRfClkInt && !pNonIpPort->m_CapRfClkExt);
             break;
         case DT_IOCONFIG_RFCLKINT:
             if (!pNonIpPort->m_CapRfClkInt)
+                return DT_STATUS_CONFIG_ERROR;
+            break;
+        case DT_IOCONFIG_RFCLKEXT:
+            if (!pNonIpPort->m_CapRfClkExt)
                 return DT_STATUS_CONFIG_ERROR;
             break;
         default:

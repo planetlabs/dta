@@ -1,4 +1,4 @@
-//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IpRx.h *#*#*#*#*#*#*#*#*#* (C) 2011-2012 DekTec
+//#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#* IpRx.h *#*#*#*#*#*#*#*#*#* (C) 2011-2015 DekTec
 //
 // Dta driver - IP RX functionality - Declaration of RX specific functionality for
 //                                    IP ports.
@@ -6,7 +6,7 @@
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- License -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
-// Copyright (C) 2011-2012 DekTec Digital Video B.V.
+// Copyright (C) 2011-2015 DekTec Digital Video B.V.
 //
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
@@ -14,8 +14,6 @@
 //     of conditions and the following disclaimer.
 //  2. Redistributions in binary format must reproduce the above copyright notice, this
 //     list of conditions and the following disclaimer in the documentation.
-//  3. The source code may not be modified for the express purpose of enabling hardware
-//     features for which no genuine license has been obtained.
 //
 // THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
 // INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
@@ -66,18 +64,20 @@ typedef struct _RtpListEntry
 {
     DtListEntry  m_ListEntry;
     UInt  m_BufIndex;         // Index of buffer.
-    UInt16  m_RTPSequenceNumber;
+    UInt16  m_RtpSequenceNumber; // RTP sequence number
     UInt16  m_PayloadOffset;  // Offset of the actual payload data (DVB/FEC) (bytes)
-    UInt16  m_RTPOffset:15;   // Offset of the RTP header packet
+    UInt16  m_RtpOffset:15;   // Offset of the RTP header packet
     UInt16  m_InUse:1;        // 1: InUse by RTP reconstructor
-    UInt16  m_Spare1;         // Not used at this moment
-    UInt64  m_Spare2;         // For timestamp with RTP seq. number (HDSDI)
+    UInt8  m_FrameCount;      // SDI Frame count this packet belongs to
+    UInt8  m_Spare;           // Not used at this moment
+    UInt32  m_Spare2;         // Not used at this moment
+    UInt32  m_RtpTimestamp;   // Timestamp of RTP packet. From 90khz or 27Mhz ref. clock
 
     // For FEC packets only
     UInt16  m_FecSNBase;      // Base Sequence number DVB packet for this Fec packet
-    UInt8  m_FecOffset;       // L parameter for FEC column, D parameter for FEC row
-    UInt8  m_FecNA;           // Number of media packets beloging to this FEC.
-    UInt32  m_Spare3;         // Not used at this moment
+    UInt16  m_FecOffset;       // L parameter for FEC column, D parameter for FEC row
+    UInt16  m_FecNA;           // Number of media packets beloging to this FEC.
+    UInt16  m_Spare3;          // Not used at this moment
 } RtpListEntry;
 
 
@@ -148,8 +148,7 @@ struct _UserIpRxChannel
                                         // purging left-over channel objects in Close
 
     DtaShBuffer  m_SharedBuffer;        // Shared User-buffer descriptor
-    //UInt  m_SharedBufferSize;           // Buffer size
-
+    
     // Receive FIFO buffer and buffer state
     // Buffer consists of "fifo" buffer + 256 auxialiary bytes for easy buffer-wrapping
     // + RTP packets (FEC row/column + RTP DVB)
@@ -161,11 +160,12 @@ struct _UserIpRxChannel
     UInt8*  m_pRtpBuffer;               // Start of RTP buffer
     UInt8*  m_pJumboPktBuffer;          // Start of Jumbo pakket buffer
     Int  m_MaxJumboPktSize;             // Size of Jumbo pakket buffer
-    UInt8* volatile  m_pRtpAvailLookup; // Lookup table to register RTP SN received
-
+    UInt32* volatile  m_pRtpAvailLookup1; // Lookup table to register RTP SN received 
+                                        // (timestamp is stored)
+    UInt32* volatile  m_pRtpAvailLookup2; // Lookup table to register RTP SN received 
+                                        // (timestamp is stored)
     UInt  m_MaxPacketOutOfSync;         // Max. time to wait for packet to come in
     UInt  m_MinPacketDelay;             // Min. delay to transfer packet to user buffer
-    
     // Status flags
     // DTAPI_RX_FIFO_OVF, DTAPI_RX_SYNC_ERR
     Int  m_Flags;                       // DTAPI_RX_FIFO_OVF, DTAPI_RX_SYNC_ERR
@@ -181,6 +181,7 @@ struct _UserIpRxChannel
     // Handshaking
     Int  m_RefCount;                    // Number of thread using this struct
     volatile Bool  m_RxIncomingPackets; // True if new RTP packets are available
+    volatile Bool  m_ResetPacketsPending;   // True if packets must be flushed
 
     // Fragmented packets
     UInt16  m_FragmentId;
@@ -206,11 +207,17 @@ struct _UserIpRxChannel
     Bool  m_DoSSMCheckSw;               // TRUE: If SSM check must be done in SW 1st port
     Bool  m_DoSSMCheckSw2;              // TRUE: If SSM check must be done in SW 2nd port
 
+    // Profile
+    Int  m_VidStd;                      // Video standard to receive. -1= TS, 0= SDI auto.
+    Int  m_MaxBitrate;                  // Maximal expected bitrate
+    Int  m_MaxSkew;                     // Max. skew in SMPTE_2022-7
+
     // Detected IP parameters
     Int  m_DetFecNumRows;               // Status to user appli
     Int  m_DetFecNumColumns;            // Status to user appli
     Int  m_DetNumTpPerIp;               // Status to user appli
     Int  m_DetProtocol;                 // Status to user appli
+    Int  m_DetVidStd;                   // Status to user appli
     Int  m_RstCntFecRow;                // Used for clearing m_DetFecNumRows
     Int  m_RstCntFecColumn;             // Used for clearing m_DetFecNumColumn
 
@@ -253,10 +260,10 @@ struct _UserIpRxChannel
     IpRxSkew  m_Skew[IPRX_SKEW_NUM_SECONDS];
     Int  m_CurSkewEl;
     Int  m_NumSkewEl;
-    Int64  m_MinSkewSecond;             // In 54Mhz Clocks
-    Int64  m_MaxSkewSecond;             // In 54Mhz Clocks
-    Int64  m_MinSkewMinute;             // In 54Mhz Clocks
-    Int64  m_MaxSkewMinute;             // In 54Mhz Clocks
+    Int64  m_MinSkewSecond;             // In 54Mhz ticks
+    Int64  m_MaxSkewSecond;             // In 54Mhz ticks
+    Int64  m_MinSkewMinute;             // In 54Mhz ticks
+    Int64  m_MaxSkewMinute;             // In 54Mhz ticks
 
     // Measurement samples: #packet bytes and time stamp (in #54MHz cycles)
     UInt32  m_BrmSampleNumPckBytes[NUM_IPRX_MAX_SAMPLES];
@@ -271,6 +278,7 @@ struct _UserIpRxChannel
                                         // These entries are stored in the shared buffer
     DtSpinLock  m_RtpListSpinLock;      // Spinlock for the Rtp list pointers
     UInt16  m_RtpLastSeqNum;            // Last used sequence number
+    UInt32  m_RtpLastTimestamp;         // Last used timestamp
     Bool  m_RtpFirstPacket;             // TRUE, if no DVB packets are received yet
     DtSpinLock  m_StatisticsSpinLock;   // Access protection
     UInt  m_NumPacketsReconstructed;    // Main stream
@@ -278,7 +286,19 @@ struct _UserIpRxChannel
     UInt  m_TotNumPackets;              // Main stream
     UInt  m_NumIpPacketsReceived[2];    // SMPTE-7 mode
     UInt  m_NumIpPacketsLost[2];        // SMPTE-7 mode
+    UInt64  m_RtpLastCheckedTime;       // Time of last packet given to user
 
+    // SDI
+    UInt8*  m_pSdiInternalWritePointer; // Update main pointer only at frame base
+    SdiRxFrameStat*  m_pSdiRxFrameStat; // Pointer to current frame statistics
+    UInt64  m_SdiFrameLastTimestamp;    // Rx Timestamp of last IP packet parsed for frame
+    UInt8  m_SdiCurFrameNumber;         // Current SDI frame number
+    Int  m_SdiNumBytesCopied;           // Number of bytes copied for current frame
+    Int  m_SdiFrameSize;                // Total number of bytes 1 frame
+    UInt8  m_SdiLeftOverBytes[5];       // The bytes left over for 10-bit conversion
+    Int  m_SdiNumLeftOverBytes;         // Number of bytes left over for 10-bit conversion
+    Bool  m_SdiSkipFrame;               // True if frame must be skipped because of error
+    
     UserIpRxChannel*  m_pNext;          // Pointer to next UserIpRxChannel element
     UserIpRxChannel*  m_pPrev;          // Pointer to previous UserIpRxChannel element
     
@@ -295,7 +315,7 @@ struct _UserIpRxChannel
                                         // Pointer to next UserIpRxChannel using the same 
                                         // address matcher entry part2
     AddressMatcherLookupEntryPart2*  m_pPrevAddrMatcherEntryPart2[3][2];
-                                        // Pointer to prev. UserIpRxChannel using the same 
+                                        // Pointer to prev. UserIpRxChannel using the same
                                         // address matcher entry part2
     AddressMatcherLookupEntry  m_AddrMatcherEntry[3][2];
                                         // Address Matcher entry
