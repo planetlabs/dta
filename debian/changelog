@@ -1,4 +1,10 @@
-dta (2014.10-1) unstable; urgency=low
+dta (2015.8) unstable; urgency=low
+
+  * Updated for August 2015 release
+
+ -- Joe Breu <breu@planet.com>  Tue, 10 Sep 2015 13:11:39 +0000
+
+dta (2014.10.1) unstable; urgency=low
 
   * Resolved path conflicts with make
 
