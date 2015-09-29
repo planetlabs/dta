@@ -1,11 +1,11 @@
-Simple builder for the DekTec driver (2015.8 version)
+Simple builder for the DekTec driver (2015.9 version)
 
 # ############################################################ 
 # Sample packages are in sample-packages/
-wget https://github.com/planetlabs/dta/raw/master/sample-packages/dta-dkms_2015.8_all.deb
-wget https://github.com/planetlabs/dta/raw/master/sample-packages/dta_2015.8_i386.deb
+wget https://github.com/planetlabs/dta/raw/master/sample-packages/dta-dkms_2015.9_all.deb
+wget https://github.com/planetlabs/dta/raw/master/sample-packages/dta_2015.9_i386.deb
 apt-get install dkms
-dpkg -i dta-dkms_2015.8_all.deb dta_2015.8_i386.deb
+dpkg -i dta-dkms_2015.9_all.deb dta_2015.9_i386.deb
 # ############################################################ 
 
 
@@ -37,31 +37,31 @@ diff Drivers/Dta/Source/Linux/Makefile Drivers/Dta/Source/Linux/Makefile.dkms
 ./extract-binaries.sh
 
 # Build the Binary packages
-debuild -b -us -uc
+debuild -b -us -uc -ai386
 
 # Build the kernel driver package.  We cheat and use the DKMS
 # tools to do this so you have to install it on a machine at
 # least once.
-sudo mkdir -p /usr/src/dta-2015.8
-sudo cp -dpR dta-dkms-mkdeb /usr/src/dta-2015.8/
-sudo cp -dpR Drivers /usr/src/dta-2015.8/
-sudo cp -dpR Common /usr/src/dta-2015.8/
-sudo cp -dpR dkms.conf /usr/src/dta-2015.8/
-sudo cp dkms.post_* /usr/src/dta-2015.8/
+sudo mkdir -p /usr/src/dta-2015.9
+sudo cp -dpR dta-dkms-mkdeb /usr/src/dta-2015.9/
+sudo cp -dpR Drivers /usr/src/dta-2015.9/
+sudo cp -dpR Common /usr/src/dta-2015.9/
+sudo cp -dpR dkms.conf /usr/src/dta-2015.9/
+sudo cp dkms.post_* /usr/src/dta-2015.9/
 
-sudo dkms add -m dta -v 2015.8
-sudo dkms build -m dta -v 2015.8
-sudo dkms install -m dta -v 2015.8
+sudo dkms add -m dta -v 2015.9
+sudo dkms build -m dta -v 2015.9
+sudo dkms install -m dta -v 2015.9
 
 # to install it for a specific kernel version
-dkms build -m dta -v 2015.8 -k 3.8.0-42-generic/x86_64
+dkms build -m dta -v 2015.9 -k 3.8.0-42-generic/x86_64
 
 # to build the DKMS debian packages.  Packages are placed into
-sudo dkms mkdeb -m dta -v 2015.8
+sudo dkms mkdeb -m dta -v 2015.9
 
 # update the sample packages
-cp /var/lib/dkms/dta/2015.8/deb/dta-dkms_2015.8_all.deb sample-packages/
-cp ../dta_2015.8_i386.deb sample-packages/
+cp /var/lib/dkms/dta/2015.9/deb/dta-dkms_2015.9_all.deb sample-packages/
+cp ../dta_2015.9_i386.deb sample-packages/
 
 # Clean up
 ./clean.sh
