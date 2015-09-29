@@ -12,7 +12,8 @@ unzip DtInfoCL.zip DtInfoCL/Linux/DtInfoCL.tar.gz
 mkdir temp
 tar zfxv DtInfoCL/Linux/DtInfoCL.tar.gz -C temp
 rm -rf DtInfoCL*
-mv temp/DtInfoCL .
+mv temp/* .
+mv DtInfoCL DtInfoCL32
 rmdir temp
 
 ls -al 

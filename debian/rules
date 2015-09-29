@@ -20,7 +20,7 @@ override_dh_auto_install:
 	dpkg-architecture -l
 	cp binaries/DtapiService$(DEB_HOST_ARCH_BITS) debian/tmp/DtapiServiced
 	cp binaries/DtapiServiceInit debian/tmp
-	cp binaries/DtInfoCL debian/tmp
+	cp binaries/DtInfoCL$(DEB_HOST_ARCH_BITS) debian/tmp/DtInfoCL
 
 override_dh_shlibdeps:
 
