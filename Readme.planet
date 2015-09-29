@@ -37,6 +37,7 @@ diff Drivers/Dta/Source/Linux/Makefile Drivers/Dta/Source/Linux/Makefile.dkms
 ./extract-binaries.sh
 
 # Build the Binary packages
+debuild -b -us -uc -aamd64
 debuild -b -us -uc -ai386
 
 # Build the kernel driver package.  We cheat and use the DKMS

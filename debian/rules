@@ -8,7 +8,7 @@
 
 # Uncomment this to turn on verbose mode.
 export DH_VERBOSE=1
-DEB_BUILD_ARCH_BITS ?= $(shell dpkg-architecture -qDEB_BUILD_ARCH_BITS)
+DEB_HOST_ARCH_BITS ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_BITS)
 
 %:
 	dh $@ 
@@ -17,7 +17,8 @@ override_dh_auto_install:
 	dh_auto_install
 	rm -rf debian/tmp
 	mkdir -p debian/tmp
-	cp binaries/DtapiService${DEB_BUILD_ARCH_BITS} debian/tmp/DtapiServiced
+	dpkg-architecture -l
+	cp binaries/DtapiService$(DEB_HOST_ARCH_BITS) debian/tmp/DtapiServiced
 	cp binaries/DtapiServiceInit debian/tmp
 	cp binaries/DtInfoCL debian/tmp
 
